@@ -31,10 +31,15 @@ async function read<T>(res: Promise<Res>): Promise<T> {
   }
   const body = await r.json().catch(() => ({}));
   if (!r.ok) {
-    throw new Error(
-      (body as { detail?: string }).detail ??
-        `エラーが発生しました（${r.status}）`,
-    );
+    const detail = (body as { detail?: string }).detail;
+    if (detail) throw new Error(detail);
+    // detail が無い 502〜504 は、開発サーバーの proxy がバックエンドにつながらなかったとき
+    if (r.status >= 502 && r.status <= 504) {
+      throw new Error(
+        "バックエンド（127.0.0.1:3001）に接続できません。apps/backend で TARGET_DIR を付けて起動しているか確認してください",
+      );
+    }
+    throw new Error(`エラーが発生しました（${r.status}）`);
   }
   return body as T;
 }
