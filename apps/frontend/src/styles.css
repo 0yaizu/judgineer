@@ -1,1 +1,4 @@
 @import "./styles/starwind.css";
+
+/* components/starwind は git 管理外。Tailwind は .gitignore 対象を自動で読まないので明示する */
+@source "./components/starwind";
