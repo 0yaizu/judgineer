@@ -29,7 +29,16 @@ jobs:
         (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude'))
       )
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # レビュー本文（pull_request_review）にはリアクションを付けられないので、コメントのときだけ付ける
+      REACT_PATH: ${{ github.event_name == 'issue_comment' && format('issues/comments/{0}', github.event.comment.id) || github.event_name == 'pull_request_review_comment' && format('pulls/comments/{0}', github.event.comment.id) || '' }}
     steps:
+      - name: 受け付けた印に 👀 を付ける
+        id: eyes
+        if: env.REACT_PATH != ''
+        run: echo "id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/$REACT_PATH/reactions" -f content=eyes --jq .id)" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -42,3 +51,13 @@ jobs:
           claude_args: |
             --allowedTools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*)"
             --append-system-prompt "日本語で答える。まず AGENTS.md を読み、設計ルールに従う。依頼されたことだけ行い、コードを読めば分かる説明は書かない。コードを実行できないので、変更後の検査は CI の結果に任せる。作者の意図が不明なら、推測で進めず質問する。"
+
+      # 終わったら 👀 を外し、成功なら 🚀、失敗なら 😕 を付ける
+      - name: 結果のリアクションに付け替える
+        if: always() && steps.eyes.outputs.id != ''
+        env:
+          EYES_ID: ${{ steps.eyes.outputs.id }}
+          RESULT: ${{ job.status == 'success' && 'rocket' || 'confused' }}
+        run: |
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/$REACT_PATH/reactions/$EYES_ID"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/$REACT_PATH/reactions" -f content="$RESULT"
