@@ -6,13 +6,10 @@ export const REPO_ROOT = resolve(import.meta.dir, "../../..");
 
 const env = process.env;
 const dataDir = resolve(env.DATA_DIR ?? resolve(REPO_ROOT, "data"));
-// 検査対象は必ず明示させる。ホームや / を丸ごとコピーしないよう拒否する
-if (!env.TARGET_DIR) {
-  throw new Error(
-    "TARGET_DIR が未設定です（例: TARGET_DIR=./samples/a_company_api）",
-  );
-}
-const targetDir = resolve(env.TARGET_DIR);
+// 未設定ならデモ用のサンプルを検査する。ホームや / を丸ごとコピーしないよう拒否する
+const targetDir = resolve(
+  env.TARGET_DIR || resolve(REPO_ROOT, "samples/a_company_api"),
+);
 if (targetDir === homedir() || targetDir === resolve("/")) {
   throw new Error(`TARGET_DIR に ${targetDir} は指定できません`);
 }

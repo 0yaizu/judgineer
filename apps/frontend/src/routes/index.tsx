@@ -1,7 +1,7 @@
 import { IconArrowRight } from "@tabler/icons-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import type { Background } from "@tka/shared";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ErrorBox } from "#/components/ErrorBox";
 import {
   Alert,
   AlertDescription,
@@ -17,8 +17,9 @@ import {
 import { Input } from "#/components/starwind/input";
 import { Label } from "#/components/starwind/label";
 import { Textarea } from "#/components/starwind/textarea";
-import { SAMPLE_BACKGROUND } from "#/lib/sample-data";
-import { createProject, useStore } from "#/lib/store";
+import { Waiting } from "#/components/Waiting";
+import { api } from "#/lib/api";
+import type { Background, ProjectSummary, Target } from "#/lib/types";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -72,14 +73,62 @@ const FIELDS: {
   },
 ];
 
+const EMPTY: Background = {
+  title: "",
+  stakeholders: "",
+  data_flow: "",
+  data_types: "",
+  constraints: "",
+  team: "",
+  notes: "",
+};
+
+// 検査対象に background.json があれば、それを下書きにする
+const draftFrom = (t: Target | null): Background => ({
+  ...EMPTY,
+  ...Object.fromEntries(
+    Object.entries(t?.background ?? {}).filter(
+      ([k, v]) => k in EMPTY && typeof v === "string",
+    ),
+  ),
+});
+
 function Home() {
   const navigate = useNavigate();
-  const { projects } = useStore();
-  const [bg, setBg] = useState<Background>(SAMPLE_BACKGROUND);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [target, setTarget] = useState<Target | null>(null);
+  const [bg, setBg] = useState<Background>(EMPTY);
+  const [busyPid, setBusyPid] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-  const submit = () => {
-    const p = createProject(bg);
-    navigate({ to: "/p/$pid", params: { pid: p.id } });
+  useEffect(() => {
+    api
+      .projects()
+      .then(setProjects)
+      .catch(() => {});
+    api
+      .target()
+      .then((t) => {
+        setTarget(t);
+        setBg(draftFrom(t));
+      })
+      .catch((e: Error) => setError(e.message));
+  }, []);
+
+  const submit = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const p = await api.createProject(bg);
+      setBusyPid(p.id);
+      await api.analyze(p.id);
+      navigate({ to: "/p/$pid", params: { pid: p.id } });
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+      setBusyPid(null);
+    }
   };
 
   return (
@@ -92,12 +141,27 @@ function Home() {
           </p>
         </div>
 
-        <Alert variant="info">
+        <Alert variant={target && !target.exists ? "error" : "info"}>
           <AlertTitle>1. アプリのコード</AlertTitle>
           <AlertDescription>
-            このデモでは、サンプルアプリ「A社
-            顧客データ提供API」のコードを使います（フォルダ・zip
-            の読み込みには対応していません）。
+            {target ? (
+              target.exists ? (
+                <>
+                  検査するフォルダ:{" "}
+                  <code className="break-all">{target.dir}</code>
+                  <br />
+                  登録するとコードのコピーを取り、元のファイルは変えません。別のアプリにするときは、環境変数
+                  TARGET_DIR を変えて起動し直してください。
+                </>
+              ) : (
+                <>
+                  検査するフォルダが見つかりません:{" "}
+                  <code className="break-all">{target.dir}</code>
+                </>
+              )
+            ) : (
+              "読み込み中…"
+            )}
           </AlertDescription>
         </Alert>
 
@@ -135,18 +199,35 @@ function Home() {
                 )}
               </div>
             ))}
-            <div className="flex items-center gap-3 sm:pl-36">
-              <Button
-                variant="primary"
-                disabled={!bg.title.trim()}
-                onClick={submit}
-              >
-                運用シミュレーションを作る
-                <IconArrowRight />
-              </Button>
-              <Button variant="ghost" onClick={() => setBg(SAMPLE_BACKGROUND)}>
-                サンプルの内容に戻す
-              </Button>
+            <div className="grid gap-3 sm:pl-36">
+              <ErrorBox message={error} />
+              {busy ? (
+                <Waiting
+                  text={
+                    busyPid
+                      ? "運用中に起きる出来事の台本を作っています（1〜2分かかります）"
+                      : "コードを調べています"
+                  }
+                  pid={busyPid ?? undefined}
+                />
+              ) : (
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="primary"
+                    disabled={!bg.title.trim() || !target?.exists}
+                    onClick={submit}
+                  >
+                    運用シミュレーションを作る
+                    <IconArrowRight />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setBg(draftFrom(target))}
+                  >
+                    下書きに戻す
+                  </Button>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -169,12 +250,10 @@ function Home() {
                     params={{ pid: p.id }}
                     className="font-medium hover:underline"
                   >
-                    {p.background.title}
+                    {p.title}
                   </Link>
                   <p className="text-xs text-muted-foreground">
-                    {p.created_at.slice(0, 10)}・判断済み{" "}
-                    {p.issues.filter((i) => i.feedback).length}/
-                    {p.issues.length}
+                    {p.created_at.slice(0, 10)}・判断済み {p.decided}/{p.issues}
                   </p>
                 </li>
               ))}

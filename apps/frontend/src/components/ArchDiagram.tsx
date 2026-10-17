@@ -1,6 +1,6 @@
 import { graphlib, layout } from "@dagrejs/dagre";
-import type { Architecture, ArchNode } from "@tka/shared";
 import { useMemo, useState } from "react";
+import type { Architecture, ArchNode } from "#/lib/types";
 
 const BOX_H = 48;
 const MIN_W = 120;

@@ -1,5 +1,5 @@
-import type { DiffRow, FileDiff } from "@tka/shared";
 import { Badge } from "#/components/starwind/badge";
+import type { DiffRow, FileDiff } from "#/lib/types";
 
 const ROW_CLASS: Record<DiffRow["type"], string> = {
   hunk: "bg-muted text-muted-foreground",
