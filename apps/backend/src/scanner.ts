@@ -121,6 +121,12 @@ function snippet(lines: string[], idx: number, around = 2): string {
   return out.join("\n");
 }
 
+/** finding.snippet のうち、finding.line の行の文字列 (`  NN  <行>` 形式の番号を除いたもの) */
+export function findingLine(f: Finding): string {
+  const m = new RegExp(`^\\s*${f.line}  (.*)$`, "m").exec(f.snippet);
+  return m?.[1] ?? "";
+}
+
 // テストは本番で動かないので対象外
 const isTestPath = (rel: string) => TEST_PATH.test(rel);
 
