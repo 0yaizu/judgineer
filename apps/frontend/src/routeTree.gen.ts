@@ -10,33 +10,63 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LessonsRouteImport } from './routes/lessons'
+import { Route as PPidIndexRouteImport } from './routes/p.$pid.index'
+import { Route as PPidIIidRouteImport } from './routes/p.$pid.i.$iid'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LessonsRoute = LessonsRouteImport.update({
+  id: '/lessons',
+  path: '/lessons',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PPidIndexRoute = PPidIndexRouteImport.update({
+  id: '/p/$pid/',
+  path: '/p/$pid/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PPidIIidRoute = PPidIIidRouteImport.update({
+  id: '/p/$pid/i/$iid',
+  path: '/p/$pid/i/$iid',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/lessons': typeof LessonsRoute
+  '/p/$pid/': typeof PPidIndexRoute
+  '/p/$pid/i/$iid': typeof PPidIIidRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/lessons': typeof LessonsRoute
+  '/p/$pid': typeof PPidIndexRoute
+  '/p/$pid/i/$iid': typeof PPidIIidRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/lessons': typeof LessonsRoute
+  '/p/$pid/': typeof PPidIndexRoute
+  '/p/$pid/i/$iid': typeof PPidIIidRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/lessons' | '/p/$pid/' | '/p/$pid/i/$iid'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/lessons' | '/p/$pid' | '/p/$pid/i/$iid'
+  id: '__root__' | '/' | '/lessons' | '/p/$pid/' | '/p/$pid/i/$iid'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LessonsRoute: typeof LessonsRoute
+  PPidIndexRoute: typeof PPidIndexRoute
+  PPidIIidRoute: typeof PPidIIidRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +78,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/lessons': {
+      id: '/lessons'
+      path: '/lessons'
+      fullPath: '/lessons'
+      preLoaderRoute: typeof LessonsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/p/$pid/': {
+      id: '/p/$pid/'
+      path: '/p/$pid'
+      fullPath: '/p/$pid/'
+      preLoaderRoute: typeof PPidIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/p/$pid/i/$iid': {
+      id: '/p/$pid/i/$iid'
+      path: '/p/$pid/i/$iid'
+      fullPath: '/p/$pid/i/$iid'
+      preLoaderRoute: typeof PPidIIidRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LessonsRoute: LessonsRoute,
+  PPidIndexRoute: PPidIndexRoute,
+  PPidIIidRoute: PPidIIidRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
