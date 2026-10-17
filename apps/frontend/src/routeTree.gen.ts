@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LessonsRouteImport } from './routes/lessons'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as SessionsRouteImport } from './routes/sessions'
 import { Route as PPidIndexRouteImport } from './routes/p.$pid.index'
 import { Route as PPidIIidRouteImport } from './routes/p.$pid.i.$iid'
 
@@ -22,6 +24,16 @@ const IndexRoute = IndexRouteImport.update({
 const LessonsRoute = LessonsRouteImport.update({
   id: '/lessons',
   path: '/lessons',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SessionsRoute = SessionsRouteImport.update({
+  id: '/sessions',
+  path: '/sessions',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PPidIndexRoute = PPidIndexRouteImport.update({
@@ -38,12 +50,16 @@ const PPidIIidRoute = PPidIIidRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/lessons': typeof LessonsRoute
+  '/register': typeof RegisterRoute
+  '/sessions': typeof SessionsRoute
   '/p/$pid/': typeof PPidIndexRoute
   '/p/$pid/i/$iid': typeof PPidIIidRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/lessons': typeof LessonsRoute
+  '/register': typeof RegisterRoute
+  '/sessions': typeof SessionsRoute
   '/p/$pid': typeof PPidIndexRoute
   '/p/$pid/i/$iid': typeof PPidIIidRoute
 }
@@ -51,20 +67,33 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/lessons': typeof LessonsRoute
+  '/register': typeof RegisterRoute
+  '/sessions': typeof SessionsRoute
   '/p/$pid/': typeof PPidIndexRoute
   '/p/$pid/i/$iid': typeof PPidIIidRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/lessons' | '/p/$pid/' | '/p/$pid/i/$iid'
+  fullPaths:
+    '/' | '/lessons' | '/register' | '/sessions' | '/p/$pid/' | '/p/$pid/i/$iid'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/lessons' | '/p/$pid' | '/p/$pid/i/$iid'
-  id: '__root__' | '/' | '/lessons' | '/p/$pid/' | '/p/$pid/i/$iid'
+  to:
+    '/' | '/lessons' | '/register' | '/sessions' | '/p/$pid' | '/p/$pid/i/$iid'
+  id:
+    | '__root__'
+    | '/'
+    | '/lessons'
+    | '/register'
+    | '/sessions'
+    | '/p/$pid/'
+    | '/p/$pid/i/$iid'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LessonsRoute: typeof LessonsRoute
+  RegisterRoute: typeof RegisterRoute
+  SessionsRoute: typeof SessionsRoute
   PPidIndexRoute: typeof PPidIndexRoute
   PPidIIidRoute: typeof PPidIIidRoute
 }
@@ -83,6 +112,20 @@ declare module '@tanstack/react-router' {
       path: '/lessons'
       fullPath: '/lessons'
       preLoaderRoute: typeof LessonsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sessions': {
+      id: '/sessions'
+      path: '/sessions'
+      fullPath: '/sessions'
+      preLoaderRoute: typeof SessionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/p/$pid/': {
@@ -105,6 +148,8 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LessonsRoute: LessonsRoute,
+  RegisterRoute: RegisterRoute,
+  SessionsRoute: SessionsRoute,
   PPidIndexRoute: PPidIndexRoute,
   PPidIIidRoute: PPidIIidRoute,
 }
