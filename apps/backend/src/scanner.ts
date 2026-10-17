@@ -6,39 +6,12 @@
  * 1. 機械のルールで該当行を拾い、AI にはその行を根拠に「運用で何が起きるか」を説明させる。
  * 2. ルールが拾えない欠陥は、AI に追加の候補を出させる。引用した行が実際のコードに実在するものだけ採用する (extra.ts)。
  */
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-} from "node:fs";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { extname } from "node:path";
+import { iterCodeFiles, splitLines } from "./scanner-files";
+import { buildFlowContexts, flowFindings } from "./scanner-security";
 
-export const CODE_EXT = new Set([
-  ".py",
-  ".js",
-  ".ts",
-  ".jsx",
-  ".tsx",
-  ".php",
-  ".rb",
-  ".go",
-  ".java",
-]);
-const SKIP_DIRS = new Set([
-  "node_modules",
-  ".git",
-  "venv",
-  ".venv",
-  "__pycache__",
-  "dist",
-  "build",
-]);
-const MAX_FILE_BYTES = 200_000;
-const TEST_PATH =
-  /(^|[\\/])(test|tests|__tests__|__mocks__|fixtures|e2e)([\\/]|$)|\.(test|spec)\.|(^|[\\/])test_[^\\/]*\.py$|_test\.(py|go)$/i;
+export { CODE_EXT, splitLines } from "./scanner-files";
 
 export type Finding = {
   id: string;
@@ -62,24 +35,53 @@ type Rule = {
   rule: string;
   title: string;
   pattern: RegExp;
-  multilineHint?: RegExp;
+  /** 未指定なら全コード拡張子。言語固有構文の誤検知を防ぐために使う */
+  extensions?: ReadonlySet<string>;
   ignoreValue?: RegExp;
+  ignoreLine?: (line: string) => boolean;
 };
 
+const PYTHON_EXT = new Set([".py"]);
+const JS_EXT = new Set([".js", ".jsx", ".ts", ".tsx"]);
+const GO_EXT = new Set([".go"]);
+const PYTHON_SOURCE = String.raw`request\.(?:args|form|json|values|data|files|get_data\(\))`;
+const JS_SOURCE = String.raw`req\.(?:query|body|params|headers|cookies)`;
+const GO_SOURCE = String.raw`r\.(?:URL\.Query\(\)\.Get|FormValue|PostFormValue|Header\.Get)`;
+const onSameLine = (left: string, right: string) =>
+  new RegExp(`^(?=.*${left})(?=.*${right})`);
+
+// ルールの追加基準: 1行から決定的に分かり、誤検知が少ないものだけ。迷うものは AI に任せる。
+// 呼び出しの名前 (execute や query) ではなく、危険な操作そのもの (SQL を連結する・MD5 でハッシュする) で書く。
+// q の引用符で囲まれた1つの文字列リテラルの中だけで SQL の形を探す (同じ行の別のリテラルをまたがない)
+const sqlLiteral = (q: string) =>
+  `[^${q}]*?(?:SELECT\\b[^${q}]*?\\bFROM\\b|INSERT\\s+INTO\\b|UPDATE\\s+\\w+\\s+SET\\b|DELETE\\s+FROM\\b)[^${q}]*`;
+const SECRET_COMPARE =
+  /(?:(?:api[_-]?key|secret|token|password|passwd)[\w"'\])(.[]*\s*(?:===?|!==?)(?!\s*(?:(?:None|null|nil|undefined)\b|["']{2}))|(?<![=!<>])(?<!(?:\b(?:None|null|nil|undefined)|["']{2})\s*)(?:===?|!==?)(?!\s*(?:(?:None|null|nil|undefined)\b|["']{2}))\s*[\w."'[\]()-]*?(?:api[_-]?key|secret|token|password|passwd))/i;
+const withoutStringLiterals = (line: string) =>
+  line.replace(/(["'])(?:\\.|(?!\1).)*\1/g, '""');
 const RULES: Rule[] = [
   {
     rule: "sql-string-build",
     title: "SQLを文字列の連結で組み立てている",
-    pattern:
-      /(execute|query|raw)\s*\(\s*(f["'].*(SELECT|INSERT|UPDATE|DELETE).*\{|["'].*(SELECT|INSERT|UPDATE|DELETE)[^"']*["']\s*\+)/i,
-    multilineHint:
-      /^\s*(f["']|["']).*(SELECT|INSERT|UPDATE|DELETE).*(\{|["']\s*\+)/i,
+    // SQL の形の文字列リテラルに変数をつなぐ形: "…" + 変数 (直後が文字列なら定数の連結なので除く)・f 文字列の {・テンプレートリテラルの ${・% / .format
+    pattern: new RegExp(
+      [
+        ...['"', "'"].flatMap((q) => [
+          `${q}${sqlLiteral(q)}${q}\\s*\\+\\s*(?!["'\`])\\S`,
+          `\\bf${q}${sqlLiteral(q)}\\{`,
+          `${q}${sqlLiteral(q)}${q}\\s+%\\s*[\\w(]`,
+          `${q}${sqlLiteral(q)}${q}\\s*\\.format\\(`,
+        ]),
+        `\`[^\`]*?(?:SELECT\\b[^\`]*?\\bFROM\\b|INSERT\\s+INTO\\b|UPDATE\\s+\\w+\\s+SET\\b|DELETE\\s+FROM\\b)[^\`]*\\$\\{`,
+      ].join("|"),
+      "i",
+    ),
   },
   {
     rule: "hardcoded-secret",
     title: "APIキーやパスワードをコードに直接書いている",
     pattern:
-      /(api_?key|secret|password|passwd|token)\w*\s*[:=]\s*["'](?<val>[^"'\s]{8,})["']/i,
+      /(api_?key|secret|password|passwd|token)\w*\s*(?::=|[:=])\s*["'](?<val>[^"'\s]{8,})["']/i,
     // 明らかなプレースホルダだけ捨てる ("prod-test-..." のような本物は残し、判断は AI の dismissed に任せる)
     ignoreValue:
       /^(test|dummy|example|sample|placeholder|changeme|fake|mock)([-_.].*)?$|^your[-_]|^x{4,}$|^<.*>$|^\$\{.*\}$/i,
@@ -87,13 +89,153 @@ const RULES: Rule[] = [
   {
     rule: "debug-enabled",
     title: "デバッグモードのまま公開している",
-    pattern: /debug\s*=\s*True|DEBUG\s*=\s*True/i,
+    pattern: /debug\s*[:=]\s*true\b/i,
   },
   {
     rule: "cors-wildcard",
     title: "どのサイトからでもAPIを呼べる設定（CORS *）",
+    // origin: "*"・origins = "*"・allow_origins=["*"] と、ヘッダ形式
     pattern:
-      /origins\s*=\s*["']\*["']|Access-Control-Allow-Origin["']?\s*[:,]\s*["']\*/i,
+      /origins?["']?\s*[:=]\s*\[?\s*["']\*["']|Access-Control-Allow-Origin["']?\s*[:,]\s*["']\*/i,
+  },
+  {
+    rule: "weak-password-hash",
+    title: "パスワードを MD5/SHA-1 でハッシュしている（破られやすい）",
+    // 同じ行に md5/sha1 と password 系の語が両方ある行 (チェックサムや ETag の md5 は拾わない)
+    pattern: /^(?=.*(?:md5|sha-?1)(?!\d))(?=.*\b(?:password|passwd|pwd|pw)\b)/i,
+  },
+  {
+    rule: "stack-leak",
+    title: "エラーのスタックトレースを利用者に返している",
+    // 応答に出す行だけ。console.error(err.stack) のようなログ出力は拾わない
+    pattern:
+      /^(?!.*\b(?:console|logger|logging|log)\.\w+\s*\()(?=.*\b(?:send|json|jsonify|return|write)\b)(?=.*(?:\b(?:err|error|e|ex)\.stack\b|traceback\.format_exc\(\)))/i,
+  },
+  {
+    rule: "stack-leak",
+    title: "エラーのスタックトレースを利用者に返している",
+    extensions: GO_EXT,
+    // debug.Stack() の結果をHTTP応答へ直接書く形。ログへの出力は対象外
+    pattern:
+      /(?:\b(?:w|writer|response)\.Write\s*\(\s*debug\.Stack\(\)|\bhttp\.Error\s*\([^,]+,\s*string\s*\(\s*debug\.Stack\(\))/,
+  },
+  {
+    rule: "tls-verification-disabled",
+    title: "TLS証明書の検証を無効にしている",
+    pattern:
+      /\bverify\s*=\s*False\b|\brejectUnauthorized\s*:\s*false\b|\bInsecureSkipVerify\s*:\s*true\b/,
+  },
+  {
+    rule: "dynamic-shell-command",
+    title: "外部入力を含む可能性がある文字列をシェルで実行している",
+    extensions: PYTHON_EXT,
+    // 固定文字列は除き、f文字列・連結・format・変数を shell=True / os.system へ渡す形だけ
+    pattern:
+      /\bos\.system\s*\(\s*(?:f["']|\w)|\bsubprocess\.\w+\s*\(\s*(?:f["'][^"']*["']|["'][^"']*["']\s*\+\s*\w+|\w+)\s*,.*\bshell\s*=\s*True/,
+  },
+  {
+    rule: "path-traversal",
+    title: "利用者が指定したパスを検証せずファイル操作に使っている",
+    extensions: PYTHON_EXT,
+    pattern: onSameLine(
+      String.raw`\b(?:open|send_file|send_from_directory)\s*\(`,
+      PYTHON_SOURCE,
+    ),
+  },
+  {
+    rule: "path-traversal",
+    title: "利用者が指定したパスを検証せずファイル操作に使っている",
+    extensions: JS_EXT,
+    pattern: onSameLine(
+      String.raw`\b(?:readFile|readFileSync|createReadStream|sendFile)\s*\(`,
+      JS_SOURCE,
+    ),
+  },
+  {
+    rule: "path-traversal",
+    title: "利用者が指定したパスを検証せずファイル操作に使っている",
+    extensions: GO_EXT,
+    pattern: onSameLine(
+      String.raw`\b(?:os\.)?(?:Open|ReadFile|Create|WriteFile)\s*\(`,
+      GO_SOURCE,
+    ),
+  },
+  {
+    rule: "ssrf",
+    title: "利用者が指定したURLへサーバーからアクセスしている",
+    extensions: PYTHON_EXT,
+    pattern: onSameLine(
+      String.raw`\b(?:requests|httpx)\.(?:get|post|put|delete|request)\s*\(`,
+      PYTHON_SOURCE,
+    ),
+  },
+  {
+    rule: "ssrf",
+    title: "利用者が指定したURLへサーバーからアクセスしている",
+    extensions: JS_EXT,
+    pattern: onSameLine(
+      String.raw`\b(?:fetch|axios\.(?:get|post|put|delete|request))\s*\(`,
+      JS_SOURCE,
+    ),
+  },
+  {
+    rule: "ssrf",
+    title: "利用者が指定したURLへサーバーからアクセスしている",
+    extensions: GO_EXT,
+    pattern: onSameLine(
+      String.raw`\bhttp\.(?:Get|Post|NewRequest|NewRequestWithContext)\s*\(`,
+      GO_SOURCE,
+    ),
+  },
+  {
+    rule: "unsafe-code-or-data",
+    title:
+      "利用者の入力をコードまたはオブジェクトとして安全確認なしで読み込んでいる",
+    extensions: PYTHON_EXT,
+    pattern: onSameLine(
+      String.raw`\b(?:pickle|dill)\.loads?\s*\(`,
+      PYTHON_SOURCE,
+    ),
+  },
+  {
+    rule: "unsafe-code-or-data",
+    title:
+      "利用者の入力をコードまたはオブジェクトとして安全確認なしで読み込んでいる",
+    extensions: JS_EXT,
+    pattern: onSameLine(String.raw`\b(?:eval|Function)\s*\(`, JS_SOURCE),
+  },
+  {
+    rule: "dynamic-shell-command",
+    title: "外部入力を含む可能性がある文字列をシェルで実行している",
+    extensions: GO_EXT,
+    pattern: onSameLine(
+      String.raw`\bexec\.Command(?:Context)?\s*\((?:[^,]+,\s*){1,2}["']-c["']`,
+      GO_SOURCE,
+    ),
+  },
+  {
+    rule: "open-redirect",
+    title: "利用者が指定したURLへ検証せずリダイレクトしている",
+    extensions: PYTHON_EXT,
+    pattern: onSameLine(String.raw`\bredirect\s*\(`, PYTHON_SOURCE),
+  },
+  {
+    rule: "open-redirect",
+    title: "利用者が指定したURLへ検証せずリダイレクトしている",
+    extensions: JS_EXT,
+    pattern: onSameLine(String.raw`\b(?:res|reply)\.redirect\s*\(`, JS_SOURCE),
+  },
+  {
+    rule: "open-redirect",
+    title: "利用者が指定したURLへ検証せずリダイレクトしている",
+    extensions: GO_EXT,
+    pattern: onSameLine(String.raw`\bhttp\.Redirect\s*\(`, GO_SOURCE),
+  },
+  {
+    rule: "mass-assignment",
+    title: "利用者の入力をオブジェクトへ無制限に反映している",
+    extensions: JS_EXT,
+    pattern: /\bObject\.assign\s*\([^,]+,\s*req\.body\s*[,)]/,
   },
   {
     rule: "pii-in-logs",
@@ -111,8 +253,9 @@ const RULES: Rule[] = [
     rule: "secret-compare",
     title: "秘密の値を == で比べている（比較時間の差から推測される）",
     // 秘密っぽい名前が ==/!= の片側にある行。None・null・"" との比較 (有無の確認) は拾わない
-    pattern:
-      /(?:(?:api[_-]?key|secret|token|password|passwd)[\w"'\])(.[]*\s*(?:===?|!==?)(?!\s*(?:(?:None|null|nil|undefined)\b|["']{2}))|(?<![=!<>])(?<!(?:\b(?:None|null|nil|undefined)|["']{2})\s*)(?:===?|!==?)(?!\s*(?:(?:None|null|nil|undefined)\b|["']{2}))\s*[\w."'[\]()-]*?(?:api[_-]?key|secret|token|password|passwd))/i,
+    pattern: SECRET_COMPARE,
+    // 環境変数名など、引用符内に secret/token があるだけの行は秘密値の比較ではない
+    ignoreLine: (line) => !SECRET_COMPARE.test(withoutStringLiterals(line)),
   },
   {
     rule: "select-all-columns",
@@ -125,15 +268,6 @@ const AUTH_WORDS =
   /check_key|login_required|auth|token|Depends\(|permission|verify/i;
 const ROUTE_RE =
   /^\s*@\w+\.(route|get|post|put|delete|patch)\(\s*["']([^"']+)["']/;
-
-// str.splitlines() 相当 (\v や \f なども行の区切りとして数える)
-// biome-ignore lint/suspicious/noControlCharactersInRegex: splitlines が区切る制御文字をそのまま使う
-const LINE_BREAK = /\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/;
-export function splitLines(text: string): string[] {
-  const lines = text.split(LINE_BREAK);
-  if (lines[lines.length - 1] === "") lines.pop();
-  return lines;
-}
 
 export function snippet(lines: string[], idx: number, around = 2): string {
   const lo = Math.max(0, idx - around);
@@ -149,40 +283,6 @@ export function snippet(lines: string[], idx: number, around = 2): string {
 export function findingLine(f: Finding): string {
   const m = new RegExp(`^\\s*${f.line}  (.*)$`, "m").exec(f.snippet);
   return m?.[1] ?? "";
-}
-
-// テストは本番で動かないので対象外
-const isTestPath = (rel: string) => TEST_PATH.test(rel);
-
-type Entry = { rel: string; abs: string; name: string };
-
-// 除外ディレクトリは降りない。シンボリックリンクは辿らない。名前順の深さ優先で並べる (結果を決定的にするため)
-function walk(root: string): Entry[] {
-  const out: Entry[] = [];
-  const visit = (dir: string, relDir: string) => {
-    const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
-      a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
-    );
-    for (const e of entries) {
-      const rel = relDir ? `${relDir}/${e.name}` : e.name;
-      if (e.isDirectory()) {
-        if (!SKIP_DIRS.has(e.name)) visit(join(dir, e.name), rel);
-      } else if (e.isFile()) {
-        out.push({ rel, abs: join(dir, e.name), name: e.name });
-      }
-    }
-  };
-  visit(root, "");
-  return out;
-}
-
-function iterFiles(root: string): Entry[] {
-  return walk(root).filter(
-    (f) =>
-      !isTestPath(f.rel) &&
-      CODE_EXT.has(extname(f.name)) &&
-      statSync(f.abs).size <= MAX_FILE_BYTES,
-  );
 }
 
 /** Python のルート定義で、関数の中に認証チェックが見当たらないもの */
@@ -243,6 +343,101 @@ function unclosedConnection(lines: string[]) {
   return out;
 }
 
+const CHILD_PROCESS_MODULE = `["'](?:node:)?child_process["']`;
+const DYNAMIC_COMMAND =
+  /\s*\(\s*(?:`[^`]*\$\{|["'][^"']*["']\s*\+\s*\w|\w+\s*[,)]|\w+\s*\+)/;
+const regexEscape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** child_process から読み込んだ exec/execSync に動的な文字列を渡す呼び出しだけを拾う */
+function dynamicShellCommandsJs(lines: string[]) {
+  const functions = new Set<string>();
+  const namespaces = new Set<string>();
+  for (const line of lines) {
+    const namedImport = new RegExp(
+      String.raw`\bimport\s*\{([^}]+)\}\s*from\s*${CHILD_PROCESS_MODULE}`,
+    ).exec(line);
+    const namedRequire = new RegExp(
+      String.raw`\b(?:const|let|var)\s*\{([^}]+)\}\s*=\s*require\(\s*${CHILD_PROCESS_MODULE}\s*\)`,
+    ).exec(line);
+    for (const spec of (namedImport?.[1] ?? namedRequire?.[1] ?? "").split(
+      ",",
+    )) {
+      const m = /^\s*(exec|execSync)(?:(?:\s+as\s+|\s*:\s*)(\w+))?\s*$/.exec(
+        spec,
+      );
+      if (m) functions.add(m[2] ?? m[1]);
+    }
+    const namespaceImport = new RegExp(
+      String.raw`\bimport\s*\*\s*as\s*(\w+)\s*from\s*${CHILD_PROCESS_MODULE}`,
+    ).exec(line);
+    const namespaceRequire = new RegExp(
+      String.raw`\b(?:const|let|var)\s+(\w+)\s*=\s*require\(\s*${CHILD_PROCESS_MODULE}\s*\)`,
+    ).exec(line);
+    if (namespaceImport) namespaces.add(namespaceImport[1]);
+    if (namespaceRequire) namespaces.add(namespaceRequire[1]);
+  }
+
+  const out: { rule: string; title: string; idx: number }[] = [];
+  lines.forEach((line, idx) => {
+    const callees = [
+      ...[...functions].map(regexEscape),
+      ...[...namespaces].map((n) => `${regexEscape(n)}\\.(?:exec|execSync)`),
+    ];
+    if (
+      callees.length &&
+      new RegExp(
+        String.raw`\b(?:${callees.join("|")})${DYNAMIC_COMMAND.source}`,
+      ).test(line)
+    ) {
+      out.push({
+        rule: "dynamic-shell-command",
+        title: "外部入力を含む可能性がある文字列をシェルで実行している",
+        idx,
+      });
+    }
+  });
+  return out;
+}
+
+/** 1行だけでは用途が決まらない弱い乱数と、アーカイブ内の名前を使う展開先を周辺文脈込みで拾う */
+function contextualSecurityFindings(lines: string[], ext: string) {
+  const out: { rule: string; title: string; idx: number }[] = [];
+  const whole = lines.join("\n");
+  const weakRandom =
+    ext === ".py"
+      ? /\b(?:random\.(?:random|randint|randrange|choice)|uuid\.uuid1)\s*\(/
+      : JS_EXT.has(ext)
+        ? /\bMath\.random\s*\(/
+        : ext === ".go" && /["']math\/rand["']/.test(whole)
+          ? /\brand\.(?:Int|Intn|Int31|Int63|Float32|Float64|Read)\s*\(/
+          : null;
+  const securityPurpose =
+    /token|reset|session|csrf|nonce|otp|verification|auth|password|secret|code/i;
+  const archivePath =
+    /(?:filepath\.Join|path\.join|joinpath|\s\/\s).*\.(?:filename|name)\b/i;
+  const archiveContext =
+    /\b(?:zip|tar|archive|infolist|getmembers)\b|\.File\b/i;
+
+  lines.forEach((line, idx) => {
+    const context = lines.slice(Math.max(0, idx - 5), idx + 1).join("\n");
+    if (weakRandom?.test(line) && securityPurpose.test(context)) {
+      out.push({
+        rule: "weak-security-randomness",
+        title: "推測しやすい乱数を認証用の値に使っている",
+        idx,
+      });
+    }
+    if (archivePath.test(line) && archiveContext.test(context)) {
+      out.push({
+        rule: "archive-path-traversal",
+        title: "アーカイブ内のパスを検証せず展開先に使っている",
+        idx,
+      });
+    }
+  });
+  return out;
+}
+
 export function scan(root: string): Finding[] {
   const findings: Finding[] = [];
   const seen = new Set<string>();
@@ -266,21 +461,24 @@ export function scan(root: string): Finding[] {
     });
   };
 
-  for (const f of iterFiles(root)) {
-    const lines = splitLines(readFileSync(f.abs, "utf8"));
+  const files = iterCodeFiles(root).map((file) => ({
+    ...file,
+    ext: extname(file.name),
+    lines: splitLines(readFileSync(file.abs, "utf8")),
+  }));
+  const flowContexts = buildFlowContexts(files);
+  for (const f of files) {
+    const { lines, ext } = f;
     lines.forEach((line, i) => {
       for (const r of RULES) {
+        if (r.extensions && !r.extensions.has(ext)) continue;
         let hit = r.pattern.exec(line);
-        if (
-          !hit &&
-          r.multilineHint &&
-          i > 0 &&
-          /(execute|query)\s*\(\s*$/.test(lines[i - 1])
-        ) {
-          hit = r.multilineHint.exec(line);
-        }
         // ダミー値は拾わない
-        if (hit && r.ignoreValue?.test(hit.groups?.val ?? "")) hit = null;
+        if (
+          hit &&
+          (r.ignoreValue?.test(hit.groups?.val ?? "") || r.ignoreLine?.(line))
+        )
+          hit = null;
         if (hit) add(r.rule, r.title, f.rel, lines, i);
       }
     });
@@ -292,316 +490,26 @@ export function scan(root: string): Finding[] {
         add(r.rule, r.title, f.rel, lines, r.idx);
       }
     }
+    if (JS_EXT.has(ext)) {
+      for (const r of dynamicShellCommandsJs(lines)) {
+        add(r.rule, r.title, f.rel, lines, r.idx);
+      }
+    }
+    for (const r of contextualSecurityFindings(lines, ext)) {
+      add(r.rule, r.title, f.rel, lines, r.idx);
+    }
+    for (const r of flowFindings(lines, ext, flowContexts.get(f.rel))) {
+      add(r.rule, r.title, f.rel, lines, r.idx);
+    }
   }
   return findings;
 }
 
-const MAX_FEATURES = 150;
-const NEXT_DEF = /^\s*(?:async\s+)?def\s+(\w+)/;
-const Q = "[\"'`]([^\"'`]+)[\"'`]";
-// 1行で名前まで取れるもの: [正規表現, 表示名]。{0}{1} は正規表現のグループ
-const FEATURE_LINE: [RegExp, string][] = [
-  [
-    new RegExp(
-      String.raw`\.(?:command|hybrid_command|slash_command)\([^)]*?\bname\s*=\s*${Q}`,
-    ),
-    "コマンド: {0}",
-  ],
-  [new RegExp(String.raw`\bsetName\(\s*${Q}`), "コマンド: {0}"],
-  [
-    new RegExp(String.raw`\b(?:client|bot)\.(?:on|once)\(\s*${Q}`),
-    "イベント: {0}",
-  ],
-  [
-    new RegExp(
-      String.raw`@\w+(?:\.\w+)*\.(get|post|put|delete|patch|route)\(\s*${Q}`,
-    ),
-    "ルート: {1} ({0})",
-  ],
-  [
-    new RegExp(
-      String.raw`\b(?:app|router)\.(get|post|put|delete|patch)\(\s*${Q}`,
-    ),
-    "ルート: {1} ({0})",
-  ],
-  [/\bpath\s*(?:=\s*\{?\s*|:\s*)["']([^"']+)["']/, "画面: {0}"],
-  [/\bschedule\.every\(([^)]*)\)/, "定期実行: every({0})"],
-  [/cron.*["']((?:[\d*/,-]+\s+){4}[\d*/,-]+)["']/i, "定期実行: cron {0}"],
-];
-// 次の def の名前を機能名にするもの (デコレータだけの行)
-const FEATURE_DECO: [RegExp, string][] = [
-  [/^\s*@\w+(?:\.\w+)*\.(?:command|hybrid_command)\(\s*\)/, "コマンド: {0}"],
-  [/^\s*@[\w.]+\.(?:event|listener)\b/, "イベント: {0}"],
-  [/^\s*@tasks\.loop\(/, "定期実行: {0}"],
-];
-const PAGE_PATH =
-  /(^|\/)pages\/.+\.(tsx|jsx|ts|js)$|(^|\/)app\/(.+\/)?page\.(tsx|jsx|ts|js)$/;
-
-const fill = (fmt: string, g: string[]) =>
-  fmt.replace(/\{(\d)\}/g, (_, n) => g[Number(n)]);
-
-export type Feature = { id: string; name: string; source: string };
-
-/** コードから機能 (コマンド・イベント・ルート・画面・定期処理) を機械的に拾う。決定的・ソート済み・重複なし */
-export function extractFeatures(root: string): Feature[] {
-  const found = new Map<string, string>(); // 機能名 -> 最初に見つけた場所
-  const setDefault = (name: string, src: string) => {
-    if (!found.has(name)) found.set(name, src);
-  };
-  for (const f of iterFiles(root)) {
-    const lines = splitLines(readFileSync(f.abs, "utf8"));
-    if (PAGE_PATH.test(f.rel)) setDefault(`画面: ${f.rel}`, `${f.rel}:1`);
-    lines.forEach((line, i) => {
-      for (const [pat, fmt] of FEATURE_DECO) {
-        if (!pat.test(line)) continue;
-        for (const l of lines.slice(i + 1, i + 6)) {
-          const m = NEXT_DEF.exec(l);
-          if (m) {
-            setDefault(fill(fmt, [m[1]]), `${f.rel}:${i + 1}`);
-            break;
-          }
-        }
-      }
-      for (const [pat, fmt] of FEATURE_LINE) {
-        const m = pat.exec(line);
-        if (m) {
-          setDefault(
-            fill(
-              fmt,
-              m.slice(1).map((x) => x.trim()),
-            ),
-            `${f.rel}:${i + 1}`,
-          );
-        }
-      }
-    });
-  }
-  const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-  const items = [...found.entries()].sort(
-    (a, b) => cmp(a[0], b[0]) || cmp(a[1], b[1]),
-  );
-  // shortcut: 上限を超えたら名前順で切る。重要度順にしたければ種類ごとに優先度をつける
-  return items
-    .slice(0, MAX_FEATURES)
-    .map(([name, source], n) => ({ id: `f${n + 1}`, name, source }));
-}
-
-/** 指摘行の前後だけを元の行番号つきで取り出す (重なる範囲は結合) */
-function excerpt(
-  rel: string,
-  lines: string[],
-  hitLines: number[],
-  around = 30,
-): string {
-  const ranges: [number, number][] = [];
-  for (const n of [...hitLines].sort((a, b) => a - b)) {
-    const lo = Math.max(1, n - around);
-    const hi = Math.min(lines.length, n + around);
-    const last = ranges[ranges.length - 1];
-    if (last && lo <= last[1] + 1) last[1] = Math.max(last[1], hi);
-    else ranges.push([lo, hi]);
-  }
-  const body = ranges
-    .map(([lo, hi]) => {
-      const out: string[] = [];
-      for (let n = lo; n <= hi; n++) {
-        out.push(`${String(n).padStart(4)}  ${lines[n - 1]}`);
-      }
-      return out.join("\n");
-    })
-    .join("\n   …\n");
-  // 見出しはファイル名だけにする (AI が修正先のファイル名として使うため)
-  return `### ${rel}\n（抜粋）\n${body}\n`;
-}
-
-/** 修正で行がずれたファイルでも指摘行を指すよう、snippet の該当行の文字列で今の行番号を探し直す */
-export function relocate<F extends { file: string; line: number }>(
-  root: string,
-  findings: (F & { snippet?: string })[],
-): F[] {
-  return findings.map((f) => {
-    const m = new RegExp(`^\\s*${f.line}  (.*)$`, "m").exec(f.snippet ?? "");
-    const path = join(root, f.file);
-    if (m?.[1].trim() && existsSync(path) && statSync(path).isFile()) {
-      const lines = splitLines(readFileSync(path, "utf8"));
-      let best: number | undefined;
-      lines.forEach((l, i) => {
-        // 同じ行が複数あれば元の位置に一番近いもの。見つからなければ元の番号のまま
-        if (
-          l === m[1] &&
-          (best === undefined ||
-            Math.abs(i + 1 - f.line) < Math.abs(best - f.line))
-        ) {
-          best = i + 1;
-        }
-      });
-      if (best !== undefined) return { ...f, line: best };
-    }
-    return f;
-  });
-}
-
-const CONFIG_NAME =
-  /^(docker-compose.*\.ya?ml|compose.*\.ya?ml|dockerfile.*|caddyfile|nginx.*\.conf|procfile|fly\.toml|vercel\.json|netlify\.toml|render\.yaml|app\.yaml|\.env\.example|\.env\.sample|readme\.md)$/i;
-const ENV_VALUE = /^(\s*(?:export\s+)?[A-Za-z_][\w.]*\s*=).*$/;
-// 値は行末まで ([^…\r\n]*)。改行まで含めると、最初の秘密以降のファイル全体が … になってしまう
-// compose などの「PASSWORD: xxx」「- API_KEY=xxx」の値も伏せる。行頭でなくても ({API_KEY: xxx, ...} のような1行の書き方でも) 伏せる
-const SECRET_VALUE =
-  /([\w.-]*(?:password|passwd|secret|token|api_?key|private_?key|credential)[\w.-]*["']?\s*[:=]\s*)(?!…)[^,}\]\s][^,}\]\r\n]*/gi;
-const COMPOSE_NAME = /^(docker-)?compose.*\.ya?ml$/i;
-const COMPOSE_VARIANT = /\.(dev|override|local|test)\.ya?ml$/i;
-
-/** AI に渡す構成ファイル (docker-compose・Dockerfile・README など)。参考用なので行番号は付けない。
- * .env は読まない。.env.example の値は本物の秘密が入っていることがあるので伏せる */
-export function readConfig(root: string, limitChars = 25_000): string {
-  const depth = (rel: string) => rel.split("/").length;
-  let found = walk(root).filter(
-    (f) => CONFIG_NAME.test(f.name) && !isTestPath(f.rel),
-  );
-  const readmes = found
-    .filter((f) => f.name.toLowerCase() === "readme.md")
-    .map((f) => depth(f.rel));
-  found = found.filter(
-    (f) =>
-      f.name.toLowerCase() !== "readme.md" ||
-      depth(f.rel) === Math.min(...readmes),
-  );
-  // 開発用の compose (docker-compose.dev.yml など) は、同じ場所に本体があれば外す
-  const bases = new Set(
-    found
-      .filter((f) => COMPOSE_NAME.test(f.name) && !COMPOSE_VARIANT.test(f.name))
-      .map((f) => dirname(f.abs)),
-  );
-  found = found.filter(
-    (f) => !(COMPOSE_VARIANT.test(f.name) && bases.has(dirname(f.abs))),
-  );
-  // 構成がいちばんわかる compose を先に
-  const key = (f: Entry) =>
-    [!COMPOSE_NAME.test(f.name), depth(f.rel), f.abs] as const;
-  found.sort((a, b) => {
-    const [x, y] = [key(a), key(b)];
-    return (
-      Number(x[0]) - Number(y[0]) ||
-      x[1] - y[1] ||
-      (x[2] < y[2] ? -1 : x[2] > y[2] ? 1 : 0)
-    );
-  });
-
-  const parts: string[] = [];
-  const skipped: string[] = [];
-  let total = 0;
-  for (const f of found) {
-    let text = readFileSync(f.abs, "utf8");
-    if (f.name.toLowerCase().startsWith(".env")) {
-      text = splitLines(text)
-        .map((l) => l.replace(ENV_VALUE, "$1…"))
-        .join("\n");
-    }
-    text = text.replace(SECRET_VALUE, "$1…");
-    text = text.replace(/(:\/\/[^/\s:@]+):[^@\s]+@/g, "$1:…@"); // URL に埋め込まれたパスワード
-    text = text.replace(/@sha256:[0-9a-f]{64}/g, ""); // イメージのダイジェストは長いだけなので外す
-    const cap = COMPOSE_NAME.test(f.name) ? 12_000 : 4_000;
-    if (text.length > cap) text = `${text.slice(0, cap)}…（以下省略）`;
-    const chunk = `### ${f.rel}\n${text}\n`;
-    if (total + chunk.length > limitChars) {
-      skipped.push(f.rel);
-      continue;
-    }
-    parts.push(chunk);
-    total += chunk.length;
-  }
-  if (skipped.length) {
-    parts.push(`（容量のため省略: ${skipped.join("、")}）`);
-  }
-  return parts.join("\n");
-}
-
-/** AI に渡すためのソースコード。指摘のあるファイルを先に入れ、入りきらなければ指摘の前後だけ、
- * それも無理なら (他のファイルも) パスだけ載せる */
-export function readSources(
-  root: string,
-  limitChars = 60_000,
-  findings: { file: string; line: number }[] = [],
-): string {
-  const hits = new Map<string, number[]>();
-  for (const f of findings) {
-    hits.set(f.file, [...(hits.get(f.file) ?? []), f.line]);
-  }
-  // 安定ソート: 指摘ありが先頭、残りは元の順
-  const files = iterFiles(root).sort(
-    (a, b) => Number(!hits.has(a.rel)) - Number(!hits.has(b.rel)),
-  );
-  const parts: string[] = [];
-  const skipped: string[] = [];
-  let total = 0;
-  for (const { rel, abs } of files) {
-    const lines = splitLines(readFileSync(abs, "utf8"));
-    let chunk = `### ${rel}\n${lines
-      .map((l, i) => `${String(i + 1).padStart(4)}  ${l}`)
-      .join("\n")}\n`;
-    const hit = hits.get(rel);
-    if (total + chunk.length > limitChars && hit) {
-      chunk = excerpt(rel, lines, hit);
-    }
-    if (total + chunk.length > limitChars) {
-      skipped.push(rel);
-      continue;
-    }
-    parts.push(chunk);
-    total += chunk.length;
-  }
-  if (skipped.length) {
-    // ファイル1つずつだと名前順の先頭しか入らないので、フォルダごとにまとめて全体の形が見えるようにする
-    const dirs = new Map<string, string[]>();
-    for (const rel of skipped) {
-      const d = dirname(rel);
-      dirs.set(d, [...(dirs.get(d) ?? []), basename(rel)]);
-    }
-    const listed: string[] = [];
-    let size = 0;
-    for (const [d, names] of [...dirs.entries()].sort((a, b) =>
-      a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0,
-    )) {
-      const line = `${d}/ (${names.length}): ${names.slice(0, 6).join(", ")}${names.length > 6 ? "…" : ""}`;
-      if (size + line.length > 8_000) {
-        listed.push(`…ほか ${dirs.size - listed.length}フォルダ`);
-        break;
-      }
-      listed.push(line);
-      size += line.length + 1;
-    }
-    parts.push(
-      `## 中身を省略したファイル（フォルダごと: ファイル数とファイル名）\n${listed.join("\n")}`,
-    );
-  }
-  return parts.join("\n");
-}
-
-/** targetDir を dest にコピーする。元のファイルは変えない。
- * 除外: SKIP_DIRS・直下の data・excludeAbs・dest 自身 (dest が targetDir の内側でも再帰しない)・シンボリックリンク */
-export function snapshotTarget(
-  targetDir: string,
-  dest: string,
-  excludeAbs: string[],
-): void {
-  const root = resolve(targetDir);
-  const excluded = new Set(
-    [...excludeAbs, dest, join(root, "data")].map((p) => resolve(p)),
-  );
-  // cpSync は dest が src の内側だと filter の前に拒否するので、自前で降りる
-  const copy = (from: string, to: string) => {
-    mkdirSync(to, { recursive: true });
-    for (const e of readdirSync(from, { withFileTypes: true })) {
-      const src = join(from, e.name);
-      if (excluded.has(src)) continue;
-      if (/^\.env(\.|$)/i.test(e.name) && !/\.(example|sample)$/i.test(e.name))
-        continue; // 秘密を複製しない
-      if (e.isDirectory()) {
-        if (!SKIP_DIRS.has(e.name)) copy(src, join(to, e.name));
-      } else if (e.isFile()) {
-        copyFileSync(src, join(to, e.name));
-      }
-    }
-  };
-  copy(root, resolve(dest));
-}
+export {
+  extractFeatures,
+  type Feature,
+  readConfig,
+  readSources,
+  relocate,
+  snapshotTarget,
+} from "./scanner-context";
