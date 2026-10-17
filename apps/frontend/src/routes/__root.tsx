@@ -70,11 +70,14 @@ function AppHeader() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4 sm:px-6">
-        <Link to="/" className="font-bold">
+    <header className="sticky top-0 z-10 border-b bg-background">
+      <div className="mx-auto flex h-14 max-w-6xl items-center gap-7 px-4 sm:px-6">
+        <Link
+          to="/"
+          className="inline-flex items-baseline gap-2 text-[17px] font-bold text-foreground hover:text-foreground"
+        >
           ジャッジニア
-          <span className="ml-2 text-xs font-normal text-muted-foreground">
+          <span className="text-xs font-medium tracking-wider text-muted-foreground">
             Judgineer
           </span>
         </Link>
@@ -84,8 +87,9 @@ function AppHeader() {
               key={n.to}
               to={n.to}
               activeOptions={{ exact: true }}
-              className="border-b-2 border-transparent py-4 text-muted-foreground hover:text-foreground"
+              className="border-b-2 py-4 hover:text-foreground"
               activeProps={{ className: "border-primary text-foreground" }}
+              inactiveProps={{ className: "border-transparent text-sub" }}
             >
               {n.label}
             </Link>

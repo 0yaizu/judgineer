@@ -15,15 +15,7 @@ import { ErrorBox } from "#/components/ErrorBox";
 import { FixView } from "#/components/FixView";
 import { LogView } from "#/components/LogView";
 import { SkipForm } from "#/components/SkipForm";
-import { Alert, AlertTitle } from "#/components/starwind/alert";
-import { Badge } from "#/components/starwind/badge";
 import { Button } from "#/components/starwind/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "#/components/starwind/card";
 import {
   Tabs,
   TabsContent,
@@ -47,7 +39,16 @@ const STEPS = ["調べる", "決める", "直す", "振り返る"];
 type Tab = "code" | "infra" | "log" | "fix";
 type Busy = "" | "start" | "chat" | "hint" | "commit" | "skip";
 
-const SEVERITY_TONE = { 高: "error", 中: "warning", 低: "neutral" } as const;
+const TAB_CLASS =
+  "grow-0 rounded-none border-0 border-b-2 border-transparent px-3.5 py-2 text-sub data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none";
+const TAB_COUNT =
+  "rounded-lg bg-line-soft px-1.5 text-[11px] font-normal text-sub";
+
+const SEVERITY_CLASS = {
+  高: "border-error text-error",
+  中: "border-sub text-foreground",
+  低: "text-sub",
+} as const;
 
 function IssueRoute() {
   const { pid, iid } = Route.useParams();
@@ -311,53 +312,51 @@ function IssuePage({
         current={`${issue.day}日目の出来事`}
       />
 
-      <Card className="bg-warning/10 ring-warning">
-        <CardHeader>
+      <div className="grid gap-2 rounded-r-lg border-l-4 border-error bg-warn-tint px-5 py-4">
+        <div>
           <div className="flex items-center gap-2">
-            <Badge variant="warning" size="sm">
+            <p className="text-xs font-bold tracking-wider text-error">
               運用 {issue.day}日目に発生
-            </Badge>
+            </p>
             {handled && (
-              <Badge
-                tone={SEVERITY_TONE[issue.severity]}
-                appearance="soft"
-                size="sm"
+              <span
+                className={`rounded border px-2 py-px text-xs font-medium whitespace-nowrap ${SEVERITY_CLASS[issue.severity]}`}
               >
                 影響 {issue.severity}
-              </Badge>
+              </span>
             )}
           </div>
-          <CardTitle className="text-xl leading-snug">
+          <h1 className="mt-1 text-[22px] leading-snug font-bold">
             {issue.incident_title}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-2">
-          <p className="max-w-4xl">{issue.incident_story}</p>
-          {cause && (
-            <p className="text-sm font-medium text-error">
-              この出来事は、{cause.day}日目にあなたが入れた修正「
-              {chosenLabel(cause)}」がきっかけで起きています。
-            </p>
-          )}
-          {origin && (
-            <p className="text-sm font-medium text-error">
-              {origin.day}日目に「{origin.skipped?.reason}
-              」という理由で見送った出来事の原因が、直されないまま残っていました。
-            </p>
-          )}
-          {changer && issue.changed_by && (
-            <p className="text-sm font-medium text-error">
-              {changer.day}日目の修正で、影響が
-              {issue.changed_by.effect === "reduced" ? "小さく" : "大きく"}
-              なっています：{issue.changed_by.reason}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          </h1>
+        </div>
+        <p className="max-w-[48em]">{issue.incident_story}</p>
+        {cause && (
+          <p className="text-sm font-medium text-error">
+            この出来事は、{cause.day}日目にあなたが入れた修正「
+            {chosenLabel(cause)}」がきっかけで起きています。
+          </p>
+        )}
+        {origin && (
+          <p className="text-sm font-medium text-error">
+            {origin.day}日目に「{origin.skipped?.reason}
+            」という理由で見送った出来事の原因が、直されないまま残っていました。
+          </p>
+        )}
+        {changer && issue.changed_by && (
+          <p className="text-sm font-medium text-error">
+            {changer.day}日目の修正で、影響が
+            {issue.changed_by.effect === "reduced" ? "小さく" : "大きく"}
+            なっています：{issue.changed_by.reason}
+          </p>
+        )}
+      </div>
 
       {preventer && (
-        <Alert variant="info">
-          <AlertTitle>この出来事は起きませんでした</AlertTitle>
+        <div className="rounded-[10px] border-2 border-primary bg-tint px-5 py-4">
+          <h2 className="mb-2 text-[19px] font-bold text-primary-accent">
+            この出来事は起きませんでした
+          </h2>
           <div className="grid gap-3">
             <p>
               {preventer.day}日目の修正「{chosenLabel(preventer)}
@@ -367,12 +366,14 @@ function IssuePage({
               運用に戻る <IconPlayerPlayFilled />
             </Button>
           </div>
-        </Alert>
+        </div>
       )}
 
       {issue.skipped && (
-        <Alert>
-          <AlertTitle>この出来事は、今回は対応しないことにしました</AlertTitle>
+        <div className="rounded-[10px] border-2 border-dashed border-muted-foreground bg-muted px-5 py-4">
+          <h2 className="mb-2 text-[19px] font-bold">
+            この出来事は、今回は対応しないことにしました
+          </h2>
           <div className="grid gap-3">
             <p>見送った理由：{issue.skipped.reason}</p>
             <p>
@@ -408,7 +409,7 @@ function IssuePage({
               )}
             </div>
           </div>
-        </Alert>
+        </div>
       )}
 
       <div
@@ -416,21 +417,23 @@ function IssuePage({
       >
         <section className="grid min-w-0 gap-4" aria-label="根拠">
           <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-            <TabsList>
-              <TabsTrigger value="code">
+            <TabsList className="w-full justify-start gap-1 rounded-none border-b bg-transparent p-0">
+              <TabsTrigger value="code" className={TAB_CLASS}>
                 コード
-                <Badge variant="ghost" size="sm">
-                  {evidence.length}
-                </Badge>
+                <span className={TAB_COUNT}>{evidence.length}</span>
               </TabsTrigger>
-              <TabsTrigger value="infra">構成図</TabsTrigger>
-              <TabsTrigger value="log">
+              <TabsTrigger value="infra" className={TAB_CLASS}>
+                構成図
+              </TabsTrigger>
+              <TabsTrigger value="log" className={TAB_CLASS}>
                 その日のログ
-                <Badge variant="ghost" size="sm">
-                  {issue.signals.length}
-                </Badge>
+                <span className={TAB_COUNT}>{issue.signals.length}</span>
               </TabsTrigger>
-              {issue.fix && <TabsTrigger value="fix">修正の結果</TabsTrigger>}
+              {issue.fix && (
+                <TabsTrigger value="fix" className={TAB_CLASS}>
+                  修正の結果
+                </TabsTrigger>
+              )}
             </TabsList>
             <TabsContent value="code" className="pt-3">
               {evidence.length > 0 ? (

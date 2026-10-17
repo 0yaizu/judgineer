@@ -16,12 +16,13 @@ const KIND_LABEL: Record<ArchNode["kind"], string> = {
   external: "外部",
 };
 
+// 色はモックに合わせる
 const KIND_CLASS: Record<ArchNode["kind"], string> = {
-  internal: "fill-primary/10 stroke-primary",
-  db: "fill-sky-500/10 stroke-sky-600",
-  partner: "fill-green-500/10 stroke-green-600",
-  person: "fill-amber-500/10 stroke-amber-600",
-  external: "fill-muted stroke-muted-foreground",
+  internal: "fill-tint stroke-[#9fc8b6]",
+  db: "fill-[#f1f4f7] stroke-[#b6c0ca]",
+  partner: "fill-[#eef3fa] stroke-[#a9bfdc]",
+  person: "fill-white stroke-[#c9d0d6]",
+  external: "fill-white stroke-[#9aa5b1] [stroke-dasharray:5_4]",
 };
 
 type Pt = { x: number; y: number };
@@ -144,7 +145,7 @@ export function ArchDiagram({
   return (
     <div>
       <svg
-        className={`mx-auto h-auto w-full ${compact ? "max-h-64" : "max-h-96"}`}
+        className={`mx-auto h-auto w-full ${compact ? "max-h-[520px]" : "max-h-[600px]"}`}
         viewBox={`0 0 ${W} ${H}`}
         role="img"
         aria-label={`システム構成図：${arch.nodes.map((n) => n.label).join("、")}`}
@@ -173,10 +174,10 @@ export function ArchDiagram({
             : "";
           const stroke =
             st === "bad"
-              ? "stroke-error stroke-2"
+              ? "stroke-error stroke-[2.2] [stroke-dasharray:6_4] animate-[arch-dash_0.8s_linear_infinite]"
               : st === "live"
-                ? "stroke-primary stroke-2"
-                : "stroke-muted-foreground/60";
+                ? "stroke-primary stroke-[2.2]"
+                : "stroke-[#b6c0ca] stroke-[1.6]";
           return (
             <g key={edgeKey(e)} className={`transition-opacity ${focus}`}>
               <path
@@ -229,8 +230,7 @@ export function ArchDiagram({
                   width={b.w + 12}
                   height={BOX_H + 12}
                   rx={12}
-                  className="fill-error/10 stroke-error stroke-1"
-                  strokeDasharray="4 3"
+                  className="animate-pulse fill-none stroke-error stroke-2 opacity-40"
                 />
               )}
               <rect
@@ -239,11 +239,15 @@ export function ArchDiagram({
                 rx={8}
                 className={
                   isBad
-                    ? "fill-error/10 stroke-error stroke-2"
-                    : KIND_CLASS[n.kind]
+                    ? "fill-warn-tint stroke-error stroke-2"
+                    : `stroke-[1.4] ${KIND_CLASS[n.kind]}`
                 }
               />
-              <text x={12} y={18} className="fill-muted-foreground text-[10px]">
+              <text
+                x={12}
+                y={18}
+                className={`text-[11px] ${isBad ? "fill-error font-medium" : "fill-muted-foreground"}`}
+              >
                 {KIND_LABEL[n.kind]}
                 {isBad ? "・影響あり" : ""}
               </text>
@@ -257,16 +261,20 @@ export function ArchDiagram({
       </svg>
 
       {!compact && (
-        <ol className="mt-3 grid gap-1 text-sm">
+        <ol className="mt-3 grid gap-x-5 gap-y-0.5 text-[12.5px] sm:grid-cols-2">
           {drawn.map(({ e, i }) => (
             <li
               key={edgeKey(e)}
-              className={`flex flex-wrap items-baseline gap-x-3 ${edgeState(e, i) === "bad" ? "text-error" : ""}`}
+              className={`flex flex-wrap items-baseline gap-x-3 ${edgeState(e, i) === "bad" ? "text-error" : "text-sub"}`}
             >
-              <span className="flex size-5 items-center justify-center rounded-full bg-muted text-xs">
+              <span
+                className={`flex size-[18px] items-center justify-center rounded-full border text-[10.5px] font-bold ${edgeState(e, i) === "bad" ? "border-error bg-error text-white" : "border-[#9aa5b1]"}`}
+              >
                 {i + 1}
               </span>
-              <span>
+              <span
+                className={`font-medium whitespace-nowrap ${edgeState(e, i) === "bad" ? "" : "text-foreground"}`}
+              >
                 {shortLabel(label(e.from))} → {shortLabel(label(e.to))}
               </span>
               <span className="text-muted-foreground">{e.label}</span>

@@ -25,10 +25,10 @@ const STATE_TEXT = {
 };
 const STATE_MARK = { open: "!", done: "✓", avoided: "◎", skipped: "–" };
 const STATE_CLASS = {
-  open: "border-error bg-error text-error-foreground",
-  done: "border-green-700 bg-green-700 text-white",
-  avoided: "border-sky-600 bg-sky-600 text-white",
-  skipped: "border-border bg-muted text-muted-foreground",
+  open: "border-white bg-error text-white animate-pulse",
+  done: "border-white bg-primary text-white",
+  avoided: "border-primary bg-white text-primary",
+  skipped: "border-muted-foreground bg-white text-sub",
 };
 
 const BLOCKED_MS = 1800;
@@ -80,10 +80,11 @@ export function Seekbar({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur">
+    <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-[18px] gap-y-2 px-4 pt-3.5 pb-[18px] sm:px-6">
       <Button
         variant="primary"
         size="icon"
+        className="rounded-full"
         onClick={onToggle}
         aria-label={playing ? "一時停止" : "再生"}
         disabled={day >= total}
@@ -91,11 +92,9 @@ export function Seekbar({
         {playing ? <IconPlayerPauseFilled /> : <IconPlayerPlayFilled />}
       </Button>
 
-      <div className="min-w-20 leading-tight">
-        <b className="text-2xl tabular-nums">{Math.floor(day)}</b>
-        <span className="ml-1 text-xs text-muted-foreground">
-          日目 / {total}日
-        </span>
+      <div className="hidden min-w-28 items-baseline gap-1 md:flex">
+        <b className="text-[22px] tabular-nums">{Math.floor(day)}</b>
+        <span className="text-xs text-muted-foreground">日目 / {total}日</span>
       </div>
 
       <div className="relative order-last min-w-0 flex-1 basis-full pt-7 pb-5 sm:order-none sm:basis-0">
@@ -116,7 +115,7 @@ export function Seekbar({
             <button
               key={m.day}
               type="button"
-              className={`absolute -top-6 flex size-5 -translate-x-1/2 items-center justify-center rounded-full border text-[10px] font-bold ${STATE_CLASS[m.state]}`}
+              className={`absolute -top-6 flex size-5 -translate-x-1/2 items-center justify-center rounded-full border-2 text-[11px] font-bold ${STATE_CLASS[m.state]}`}
               style={{ left: pct(m.day) }}
               title={`${m.day}日目：${m.label}`}
               aria-label={`${m.day}日目の出来事：${m.label}（${STATE_TEXT[m.state]}）`}
@@ -139,7 +138,7 @@ export function Seekbar({
           ))}
         </div>
         {blocked && (
-          <div className="absolute right-0 bottom-full mb-1 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow">
+          <div className="absolute right-0 bottom-full mb-1 rounded bg-warn-tint px-2.5 py-0.5 text-xs text-error">
             {blockedMessage ?? "先に起きた出来事に対応してください"}
           </div>
         )}
@@ -153,7 +152,11 @@ export function Seekbar({
         onValueChange={(v) => v[0] && onSpeed(Number(v[0]))}
       >
         {[1, 3].map((s) => (
-          <ToggleGroupItem key={s} value={String(s)}>
+          <ToggleGroupItem
+            key={s}
+            value={String(s)}
+            className="h-8 text-xs text-sub data-[state=on]:bg-foreground data-[state=on]:text-background data-[state=on]:hover:bg-foreground data-[state=on]:hover:text-background"
+          >
             {s}x
           </ToggleGroupItem>
         ))}
