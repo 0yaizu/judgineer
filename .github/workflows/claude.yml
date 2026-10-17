@@ -14,12 +14,12 @@ permissions:
   issues: write
   actions: read
 
-concurrency:
-  group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
-  cancel-in-progress: false
-
 jobs:
   claude:
+    # ジョブ側に置く。ワークフロー側だと @claude なしのコメントも待機枠を取り、待機中の依頼が消える
+    concurrency:
+      group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
     # PR 上の @claude だけ、リポジトリ関係者の発言だけに反応する
     if: |
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association || github.event.review.author_association) &&
