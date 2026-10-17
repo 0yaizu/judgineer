@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
-import type { Architecture, Flow } from "@tka/shared";
+import type { Architecture, Flow, Signal } from "@tka/shared";
 import {
   clampDay,
   cleanArchitecture,
   cleanFlows,
   cleanIfIgnored,
+  cleanSignals,
   ifIgnoredFor,
   settled,
   uniqueDay,
@@ -209,4 +210,21 @@ test("settled", () => {
       skipped: { reason: "r", at: "t", impact: "none", impact_reason: "" },
     }),
   ).toBe(true);
+});
+
+test("cleanSignals: 時刻を HH:MM:SS に直し、取れないものや空は捨てる", () => {
+  const s = (time: string, text = "x", level = "info", source = "api") =>
+    ({ time, source, level, text }) as Signal;
+  const out = cleanSignals([
+    s("前日 17:30:05"),
+    s("7:5"),
+    s("", "[09:12] 起動"),
+    s("06:12", "y", "fatal"),
+    s("08:00:00", ""),
+  ]);
+  expect(out.map((o) => o.time)).toEqual(["17:30:05", "09:12:00", "06:12:00"]);
+  expect(out[2]?.level).toBe("info");
+  const nine = Array.from({ length: 9 }, () => s("01:02:03"));
+  expect(cleanSignals(nine)).toHaveLength(8);
+  expect(cleanSignals(null)).toEqual([]);
 });

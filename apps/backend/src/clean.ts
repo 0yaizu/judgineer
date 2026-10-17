@@ -3,6 +3,7 @@ import {
   type Flow,
   type IssueOutline,
   NODE_KINDS,
+  type Signal,
 } from "@tka/shared";
 import type { Finding } from "./scanner";
 import type { IfIgnored, IssueData } from "./types";
@@ -85,10 +86,30 @@ export function cleanIfIgnored(
     after_days: ii.impact === "escalate" ? Math.max(7, Math.min(90, after)) : 0,
     incident_title: title,
     incident_story: String(ii.incident_story ?? ""),
-    signals: (ii.signals ?? [])
-      .filter((s) => s && typeof s === "object")
-      .slice(0, 8),
+    signals: cleanSignals(ii.signals),
   };
+}
+
+const TIME_RE = /(?<!\d)([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?(?!\d)/;
+
+/** time を HH:MM:SS に直す。取り出せなければ text から探し、それでも無ければ捨てる。最大8件 */
+export function cleanSignals(signals: Signal[] | null | undefined): Signal[] {
+  const out: Signal[] = [];
+  for (const s of signals ?? []) {
+    if (!s || typeof s !== "object") continue;
+    const text = String(s.text ?? "");
+    if (!text.trim()) continue;
+    const m = TIME_RE.exec(String(s.time ?? "")) ?? TIME_RE.exec(text);
+    if (!m) continue;
+    out.push({
+      time: `${m[1]?.padStart(2, "0")}:${m[2]}:${m[3] ?? "00"}`,
+      source: String(s.source ?? ""),
+      level: s.level === "warn" || s.level === "error" ? s.level : "info",
+      text,
+    });
+    if (out.length === 8) break;
+  }
+  return out;
 }
 
 const NO_FOLLOWUP = (reason: string): IfIgnored => ({

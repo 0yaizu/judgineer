@@ -28,7 +28,11 @@ export const backgroundSchema = z.object({
 export type Background = z.infer<typeof backgroundSchema>;
 
 export const signalSchema = z.object({
-  time: z.string(),
+  time: z
+    .string()
+    .describe(
+      '"06:12:03" のように 時:分:秒 の24時間表記だけ（日付や「前日」は付けない）',
+    ),
   source: z.string(),
   level: z.enum(["info", "warn", "error"]),
   text: z.string(),

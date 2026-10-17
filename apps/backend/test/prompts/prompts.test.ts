@@ -114,10 +114,13 @@ describe("analyze", () => {
       },
       findings: [finding],
       arch,
+      others: [{ day: 3, title: "OTHER_T", incident_title: "OTHER_INC" }],
     };
     const d = detailPrompt(base);
     expect(d).toContain("incident_story:");
     expect(d).toContain("TITLE_X");
+    expect(d).toContain("<timeline>");
+    expect(d).toContain("OTHER_INC");
     expect(d.split("TITLE_X").length - 1).toBe(1);
     expect(d).not.toContain("<first_incident>");
     const e = detailPrompt({

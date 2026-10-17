@@ -1,6 +1,6 @@
 import { issueDetailSchema } from "@tka/shared";
 import { generate } from "./ai/client";
-import { settled } from "./clean";
+import { cleanSignals, settled } from "./clean";
 import { parsePartialJson } from "./partial-json";
 import { partialDetail } from "./partial-view";
 import { endProgress, setChars, setPartial, setStage } from "./progress";
@@ -56,6 +56,14 @@ async function generateDetail(
       issue,
       findings: p.findings.filter((f) => issue.finding_ids.includes(f.id)),
       arch: p.architecture,
+      others: p.issues
+        .filter((i) => i.id !== iid)
+        .sort((a, b) => a.day - b.day)
+        .map(({ day, title, incident_title }) => ({
+          day,
+          title,
+          incident_title,
+        })),
       parent: parent && {
         incident_story: parent.incident_story,
         reason:
@@ -76,7 +84,7 @@ async function generateDetail(
   )
     return;
   target.incident_story = result.incident_story;
-  target.signals = result.signals.slice(0, 8);
+  target.signals = cleanSignals(result.signals);
   // 見送りから生まれた出来事は、skip 時にコピーした値を残す
   if (!target.escalated_from) {
     target.what_happens = result.what_happens;

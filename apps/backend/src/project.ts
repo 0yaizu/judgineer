@@ -1,6 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { type Incident, SIM_DAYS } from "@tka/shared";
+import { cleanSignals } from "./clean";
 import { config } from "./config";
 import { HttpError } from "./http";
 import * as repo from "./repo";
@@ -54,7 +55,7 @@ export function incidentFields(
     incident_title: it.incident_title,
     incident_story: it.incident_story,
     view: it.view,
-    signals: it.signals.slice(0, 8),
+    signals: cleanSignals(it.signals),
     affected_nodes: it.affected_nodes.filter((a) => nodeIds.has(a)),
   };
 }

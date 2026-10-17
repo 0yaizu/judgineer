@@ -79,7 +79,7 @@ export function issuesPrompt(a: {
       `dismissed（問題にしない findings）:
 - findings は機械的に拾った候補で、誤検知を含む。ソースと背景を見て、運用で実害につながらないものは issues にせず dismissed に入れる。reason は実害にならない理由を一文で。
 - 例: テスト・サンプル・ドキュメント用のダミー値、本番では動かないコード、環境変数から読んだ値を代入しているだけの行、すでに対策されている箇所。
-- 迷うものは issues に残す。
+- 迷うものは issues に残す。影響が小さいだけのもの（運用の手違いや手間につながるが、被害は限られる）は dismissed にせず、issues に残して severity を「低」にする。dismissed にするのは、実害になる筋道が無いものだけ。
 - すべての findings を issues か dismissed のどちらかに必ず入れる。
 
 issues（運用中に起きる出来事）:
@@ -89,7 +89,11 @@ issues（運用中に起きる出来事）:
 - view: 原因がコードの書き方なら code、構成・権限・運用体制なら infra。
 - affected_nodes: 構成図の node の id だけを使う。
 - title: 原因を一文で（20字前後）。
-- severity: 背景をふまえた影響の大きさ。
+- severity: 次の基準で決める。
+  - 高: 認証がない・弱い・共通の鍵のせいで、個人情報や機密データが外から読み出せる、または書き換え・削除できる。外から遠隔操作（任意コードの実行など）される入口になる。止まると契約違反（違約金など）に直結する。
+  - 中: 条件がそろうと被害が出る（特定の相手や手順が必要）。漏れても範囲が限られる。復旧や運用の手間が増える。
+  - 低: 影響が社内に閉じる、または実害につながりにくい。
+  - 背景（扱うデータ・契約・チームの体制）を見て、1段階だけ上げ下げしてよい。ただし、個人情報に届く脆弱性は「中」を下回らない。
 - 出来事の本文（経緯・ログ・影響など）は、あとで1件ずつ作る。ここでは書かない。
 - if_ignored: 本人がこの出来事を「今回は対応しない」と見送った場合。
   - impact: 被害が広がる・より大きな形で表に出るなら escalate。テスト用ファイル・使われていないコード・影響が社内で小さく閉じるものなど、運用への影響が小さいなら none。reason は理由を一文で。
@@ -115,6 +119,7 @@ export function detailPrompt(a: {
   >;
   findings: Finding[];
   arch: Architecture;
+  others: { day: number; title: string; incident_title: string }[];
   parent?: { incident_story: string; reason: string };
 }): string {
   const {
@@ -134,6 +139,8 @@ export function detailPrompt(a: {
 - 原因の名前（SQLインジェクション等）は incident_story と signals には書かない。
 - what_happens: 原因と、放っておくと運用で何が起きるか（2〜3文）。
 - who_is_affected: 背景に出てくる名前を使う。
+- 登場する人物名・社名・サービス名は、背景とほかの出来事に合わせる（食い違わせない）。
+- この出来事の day より後の出来事は、まだ起きていないものとして書く（触れない）。
 - background_link: この問題に関係する背景の情報。なければ空文字。${
         a.parent
           ? "\n- これは、一度見送った出来事が悪化した場面。最初の出来事より深刻になった場面として書く。"
@@ -151,6 +158,14 @@ export function detailPrompt(a: {
         view,
         affected_nodes,
       }),
+    ),
+    tag(
+      "timeline",
+      `ほかの出来事（day 順）:\n${
+        a.others
+          .map((o) => `- day ${o.day}: ${o.incident_title}（${o.title}）`)
+          .join("\n") || "（なし）"
+      }`,
     ),
     ...(a.parent
       ? [
