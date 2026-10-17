@@ -38,7 +38,7 @@ export default new Hono()
       !existsSync(config.targetDir) ||
       !statSync(config.targetDir).isDirectory()
     )
-      throw new HttpError(400, "検査対象のフォルダが見つかりません");
+      throw new HttpError(500, "検査対象のフォルダが見つかりません");
 
     const id = repo.newId();
     const src = srcDir(id);

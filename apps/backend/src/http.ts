@@ -4,7 +4,7 @@ import { z } from "zod";
 /** 想定内のエラー。app.onError が { detail } 付きで返す */
 export class HttpError extends Error {
   constructor(
-    readonly status: 400 | 404,
+    readonly status: 400 | 404 | 500,
     message: string,
   ) {
     super(message);
