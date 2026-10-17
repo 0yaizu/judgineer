@@ -17,3 +17,5 @@ dist-ssr
 *.db-wal
 # 実行時データ（検査対象のコピーなど）
 data/
+
+apps/frontend/src/components/starwind
