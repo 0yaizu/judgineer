@@ -18,6 +18,7 @@ import {
   uniqueDay,
 } from "./clean";
 import { prefetch } from "./detail";
+import { extraFindings } from "./extra";
 import { parsePartialJson } from "./partial-json";
 import { partialArchitecture, partialIssues } from "./partial-view";
 import {
@@ -36,7 +37,12 @@ import {
   issuesPrompt,
 } from "./prompts/analyze";
 import * as repo from "./repo";
-import { extractFeatures, readConfig, readSources } from "./scanner";
+import {
+  extractFeatures,
+  readConfig,
+  readSources,
+  scannerFindings,
+} from "./scanner";
 import type { Issue, Project } from "./types";
 
 const STEPS = 5;
@@ -62,6 +68,7 @@ function reset(p: Project): void {
 
 async function run(pid: string) {
   const p = loadProject(pid);
+  p.findings = scannerFindings(p.findings); // 前回の分析で入った AI 由来の分は捨てる
   if (p.findings.length === 0) {
     reset(p);
     Object.assign(p, {
@@ -81,25 +88,30 @@ async function run(pid: string) {
   setStage(pid, 2, "機能一覧を抜き出しています");
   const features = extractFeatures(src);
   // 4回の呼び出しで同じ system を使い、キャッシュを効かせる
+  // AI の追加分が入ると system が変わってキャッシュが効かなくなるので、スキャナ由来だけで作る
   const system = analyzeSystem({
     bg: p.background,
-    sources: readSources(src, 60_000, p.findings),
+    sources: readSources(src, 60_000, scannerFindings(p.findings)),
     config: readConfig(src),
   });
 
-  setStage(pid, 3, "AIが構成図を考えています");
-  // 先に単独で呼んで、キャッシュを作る
-  const archRes = await generate({
-    task: "arch",
-    system,
-    prompt: archPrompt(),
-    schema: archResultSchema,
-    onPartial: (json) =>
-      setPartial(pid, () => {
-        const architecture = partialArchitecture(parsePartialJson(json));
-        return architecture && { architecture };
-      }),
-  });
+  setStage(pid, 3, "AIが構成図を考え、追加の指摘を探しています");
+  // arch は findings に依存しないので、追加の指摘探しと並列に呼ぶ
+  const [archRes, extras] = await Promise.all([
+    generate({
+      task: "arch",
+      system,
+      prompt: archPrompt(),
+      schema: archResultSchema,
+      onPartial: (json) =>
+        setPartial(pid, () => {
+          const architecture = partialArchitecture(parsePartialJson(json));
+          return architecture && { architecture };
+        }),
+    }),
+    extraFindings({ root: src, system, existing: p.findings }),
+  ]);
+  p.findings.push(...extras);
   const arch = cleanArchitecture(archRes.architecture);
 
   setStage(pid, 4, "AIが利用シナリオと台本を書いています");

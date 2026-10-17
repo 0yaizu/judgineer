@@ -105,6 +105,9 @@ function reply(o: GenerateOpts<z.ZodType>): unknown {
           ],
         },
       };
+    // 既定は候補なし (既存テストの findings と呼び出しの組み合わせを変えないため)
+    case "extra_findings":
+      return { candidates: [] };
     case "flows_all":
       return {
         flows: [

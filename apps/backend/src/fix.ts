@@ -13,7 +13,7 @@ import {
   nextIssueId,
 } from "./project";
 import { applyPrompt, applySystem } from "./prompts/apply";
-import { readSources, relocate, scan } from "./scanner";
+import { readSources, relocate, scan, scannerFindings } from "./scanner";
 import { checkSyntax, syntaxCheckable } from "./syntax";
 import type { Effect, Fix, Issue, Project } from "./types";
 import { verifyFix } from "./verify";
@@ -144,7 +144,7 @@ export async function applyFix(p: Project, issue: Issue): Promise<void> {
   for (const [file, content] of Object.entries(newContent)) {
     writeFileSync(targets[file], content);
   }
-  const v = verifyFix(p.findings, scanBefore, scan(cur));
+  const v = verifyFix(scannerFindings(p.findings), scanBefore, scan(cur));
 
   let archAfter = cleanArchitecture(result.architecture_after);
   if (archAfter.nodes.length === 0) archAfter = archBefore;
@@ -153,13 +153,15 @@ export async function applyFix(p: Project, issue: Issue): Promise<void> {
   // この先の出来事への影響
   const effects: Effect[] = [];
   const aiSays = new Map(result.future.map((e) => [e.issue_id, e]));
+  const scannerIds = new Set(scannerFindings(p.findings).map((f) => f.id));
   // 再スキャンで確かめられるものはスキャナの結果を優先し、AI の自己申告は確かめられないときだけ使う
   for (const o of future) {
     const ai = aiSays.get(o.id);
     let effect = ai?.effect;
     let reason = ai?.reason ?? "";
     const ids = o.finding_ids;
-    if (ids.length > 0) {
+    // AI 由来の指摘はスキャナで再確認できないので、AI の判定を残す
+    if (ids.length > 0 && ids.every((id) => scannerIds.has(id))) {
       const done = ids.filter((id) => v.resolvedIds.has(id)).length;
       if (done === ids.length) {
         effect = "prevented";
@@ -183,10 +185,13 @@ export async function applyFix(p: Project, issue: Issue): Promise<void> {
   // 自動チェックの結果
   const where = (f: { file: string; line: number }) =>
     `${f.file} ${f.line}行目`;
-  const ownResolved = evidence
+  // 確かめられるのはスキャナ由来の指摘だけ。AI が見つけたものは「確認できない」として分ける
+  const checkable = evidence.filter((f) => scannerIds.has(f.id));
+  const unchecked = evidence.length - checkable.length;
+  const ownResolved = checkable
     .filter((f) => v.resolvedIds.has(f.id))
     .map((f) => f.id);
-  const ownRemaining = evidence.filter((f) => !v.resolvedIds.has(f.id));
+  const ownRemaining = checkable.filter((f) => !v.resolvedIds.has(f.id));
   const verification: NonNullable<Fix["verification"]> = {
     resolved: ownResolved,
     remaining: ownRemaining.map((f) => f.id),
@@ -214,6 +219,10 @@ export async function applyFix(p: Project, issue: Issue): Promise<void> {
       )}）。`,
     );
   }
+  if (unchecked > 0)
+    checkParts.push(
+      `AI が見つけた指摘${unchecked}件は、スキャナでは確かめられません。`,
+    );
   checkParts.push(
     v.introduced.length === 0
       ? "新しい指摘はありません。"

@@ -7,7 +7,7 @@ import { endProgress, setChars, setPartial, setStage } from "./progress";
 import { loadProject, srcDir } from "./project";
 import { analyzeSystem, detailPrompt } from "./prompts/analyze";
 import * as repo from "./repo";
-import { readConfig, readSources } from "./scanner";
+import { readConfig, readSources, scannerFindings } from "./scanner";
 import type { Issue } from "./types";
 
 /** 本文が作ってあるか (空文字が未生成の印。昔のデータは最初から入っている) */
@@ -49,7 +49,7 @@ async function generateDetail(
     // analyze.ts と完全に同じ引数にして、キャッシュを効かせる
     system: analyzeSystem({
       bg: p.background,
-      sources: readSources(src, 60_000, p.findings),
+      sources: readSources(src, 60_000, scannerFindings(p.findings)),
       config: readConfig(src),
     }),
     prompt: detailPrompt({

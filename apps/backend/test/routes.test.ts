@@ -29,12 +29,13 @@ test("登録の入力検査", async () => {
   expect((await api("GET", "/api/projects/nope")).status).toBe(404);
 });
 
-test("analyze: 5回の呼び出しで system が同じで、arch が先頭", async () => {
+test("analyze: 6回の呼び出しで system が同じで、arch が先頭", async () => {
   const before = readdirSync(config.targetDir).sort();
   const { project } = await setup();
   expect(calls.map((c) => c.task).sort()).toEqual([
     "arch",
     "detail", // 一番早い出来事の本文の先読み
+    "extra_findings", // arch と並列 (追加の指摘探し)
     "flows",
     "flows_all",
     "issues",
