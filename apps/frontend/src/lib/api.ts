@@ -11,8 +11,11 @@ import type {
   Target,
 } from "./types";
 
-// パスは hc<AppType> から作る（ルートの書き間違いを型で検出する）
-const client = hc<AppType>("/").api;
+// パスは hc<AppType> から作る（ルートの書き間違いを型で検出する）。
+// $url() は new URL() を使うので、相対の "/" ではなくページのオリジンを基準にする
+const origin =
+  typeof window === "undefined" ? "http://localhost" : window.location.origin;
+const client = hc<AppType>(origin).api;
 
 type Res = { ok: boolean; status: number; json(): Promise<unknown> };
 
