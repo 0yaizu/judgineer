@@ -14,6 +14,7 @@ import {
 } from "./project";
 import { applyPrompt, applySystem } from "./prompts/apply";
 import { readSources, relocate } from "./scanner";
+import { checkSyntax } from "./syntax";
 import type { Effect, Issue, Project } from "./types";
 
 /** 選び直したときに、前の修正の影響を元に戻す */
@@ -86,13 +87,16 @@ export async function applyFix(p: Project, issue: Issue): Promise<void> {
   }
   const beforeFiles: Record<string, string> = {};
   const diffs = [];
+  const newContent: Record<string, string> = {};
+  const targets: Record<string, string> = {};
+  // 1) 変更後の内容をメモリ上で作る (まだ書き込まない)
   for (const [file, changes] of byFile) {
     const target = inside(cur, file); // current/ の外は書き換えない
     if (!target || !isFile(target)) continue;
     const before = readFileSync(target, "utf8");
     const lines = splitLines(before);
     const notes: string[] = [];
-    let applied = false;
+    let changed = false;
     let lastStart = lines.length + 2;
     for (const c of [...changes].sort((a, b) => b.start_line - a.start_line)) {
       const s = c.start_line;
@@ -102,18 +106,39 @@ export async function applyFix(p: Project, issue: Issue): Promise<void> {
       if (e >= lastStart) continue;
       lines.splice(s - 1, e - (s - 1), ...c.new_lines);
       lastStart = s;
-      applied = true;
+      changed = true;
       if (c.note) notes.push(c.note);
     }
-    if (!applied) continue;
+    if (!changed) continue;
     const after = lines.join("\n") + (before.endsWith("\n") ? "\n" : "");
-    writeFileSync(target, after);
+    newContent[file] = after;
+    targets[file] = target;
     beforeFiles[file] = before;
     diffs.push({
       file,
       notes: notes.reverse(),
       rows: diffRows(before, after),
     });
+  }
+
+  // 2) 構文チェック。1つでもエラーなら何も書かずに元へ戻して弾く
+  for (const [file, content] of Object.entries(newContent)) {
+    const err = await checkSyntax(file, content);
+    if (err) {
+      for (const [f, c] of Object.entries(applied)) {
+        const t = inside(cur, f);
+        if (t) writeFileSync(t, c);
+      }
+      throw new HttpError(
+        422,
+        `AI が作った修正に構文エラーがありました（${file}: ${err}）。もう一度反映を試してください`,
+      );
+    }
+  }
+
+  // 3) 書き込む
+  for (const [file, content] of Object.entries(newContent)) {
+    writeFileSync(targets[file], content);
   }
 
   let archAfter = cleanArchitecture(result.architecture_after);
