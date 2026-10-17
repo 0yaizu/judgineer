@@ -181,3 +181,72 @@ export const aCompanyApi: Golden = {
     "デバッグモード",
   ],
 };
+
+export const partnerPortalApi: Golden = {
+  findings: [
+    {
+      rule: "debug-enabled",
+      match: "debug: true",
+      expect: "issue",
+      min_severity: "中",
+      note: "本番用の設定でデバッグ機能が有効になっている",
+    },
+    {
+      rule: "hardcoded-secret",
+      match: "partnerToken:",
+      expect: "issue",
+      min_severity: "高",
+      note: "パートナー用トークンがソースコードに含まれている",
+    },
+    {
+      rule: "path-traversal",
+      match: "download.path",
+      expect: "issue",
+      min_severity: "高",
+      note: "外部利用者の指定したパスを一部の経路でしか安全化していない",
+    },
+    {
+      rule: "open-redirect",
+      match: "res.redirect(returnTo)",
+      expect: "issue",
+      min_severity: "中",
+      note: "ログイン完了後の遷移先を検証していない",
+    },
+    {
+      rule: "mass-assignment",
+      match: "Object.assign(account, req.body)",
+      expect: "issue",
+      min_severity: "高",
+      note: "プロフィール更新で権限を含む任意フィールドを書き換えられる",
+    },
+    {
+      rule: "sql-string-build",
+      match: "projectId}'",
+      expect: "issue",
+      min_severity: "高",
+      note: "URLの案件IDをSQLへ直接埋め込んでいる",
+    },
+    {
+      rule: "ssrf",
+      match: "fetch(url)",
+      expect: "issue",
+      min_severity: "高",
+      note: "登録された複数のWebhook URLへ検証せずアクセスしている",
+    },
+    {
+      rule: "cors-wildcard",
+      match: 'origin: "*"',
+      expect: "issue",
+      min_severity: "中",
+      note: "認証情報を扱うAPIを任意のWebサイトから呼び出せる",
+    },
+  ],
+  arch: { kinds: ["external", "internal", "db"] },
+  cause_words: [
+    "パストラバーサル",
+    "SQLインジェクション",
+    "SSRF",
+    "オープンリダイレクト",
+    "マスアサインメント",
+  ],
+};
