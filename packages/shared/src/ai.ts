@@ -151,6 +151,25 @@ export const issuesResultSchema = z.object({
 });
 export type IssuesResult = z.infer<typeof issuesResultSchema>;
 
+export const extraFindingsResultSchema = z.object({
+  candidates: z.array(
+    z.object({
+      title: z.string().describe("問題を一文で（30字前後）"),
+      file: z.string().describe("source の見出しのファイル名"),
+      line: z
+        .number()
+        .int()
+        .describe("その問題の行番号（source に付いている番号）"),
+      quote: z
+        .string()
+        .describe("問題のある行を、ソースから一字一句コピーした1行"),
+      why: z.string().describe("運用で何が起きるかの一文"),
+    }),
+  ),
+});
+export type ExtraFindingsResult = z.infer<typeof extraFindingsResultSchema>;
+export type ExtraCandidate = ExtraFindingsResult["candidates"][number];
+
 export const applyResultSchema = z.object({
   summary: z.string(),
   code_changes: z.array(

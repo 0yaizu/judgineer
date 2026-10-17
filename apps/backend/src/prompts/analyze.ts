@@ -105,6 +105,26 @@ issues（運用中に起きる出来事）:
   ].join("\n\n");
 }
 
+export function extraFindingsPrompt(a: { findings: Finding[] }): string {
+  return [
+    part(
+      "追加の指摘候補（candidates）",
+      `- 機械のルールが拾えていない、運用で実際に問題になる欠陥を探す。known_findings と同じ問題は出さない。
+- 各候補は、問題のある行を source から一字一句コピーした1行にして quote に入れる。コピーできない（コードに実在しない）ものは出さない。file は source の見出しのファイル名、line はその行番号。
+- why には、運用で何が起きるかを、背景（扱うデータ・契約・チームの体制）と結びつけて一文で書く。
+- 出さないもの: 書き方の好み・命名・コメント・テストの不足・「あったほうがよい」程度の改善・確信が持てないもの。依存パッケージの版の脆弱性（ここでは確かめられない）。
+- 探す観点の例: リソースの扱い、入力の検査、エラーや失敗の扱い、認証や比較の仕方、設定の持ち方。
+- 最大8件。無ければ空の配列。`,
+    ),
+    tag(
+      "known_findings",
+      a.findings
+        .map((f) => `- ${f.rule}: ${f.title} (${f.file}:${f.line})`)
+        .join("\n") || "（なし）",
+    ),
+  ].join("\n\n");
+}
+
 /** 骨組みの issue 1件ぶんの本文を作る。parent があれば、見送った結果として悪化した場面 */
 export function detailPrompt(a: {
   issue: Pick<

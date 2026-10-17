@@ -2,7 +2,9 @@
  * コードから「根拠になる箇所」を機械的に拾う簡易スキャナ。
  *
  * AI にいきなり脆弱性を探させると、ありもしない問題を言い出すことがある。
- * そこで、まずルールで該当行を拾い、AI にはその行を根拠に「運用で何が起きるか」を説明させる。
+ * そこで二段構えにする。
+ * 1. 機械のルールで該当行を拾い、AI にはその行を根拠に「運用で何が起きるか」を説明させる。
+ * 2. ルールが拾えない欠陥は、AI に追加の候補を出させる。引用した行が実際のコードに実在するものだけ採用する (extra.ts)。
  */
 import {
   copyFileSync,
@@ -14,7 +16,7 @@ import {
 } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 
-const CODE_EXT = new Set([
+export const CODE_EXT = new Set([
   ".py",
   ".js",
   ".ts",
@@ -45,7 +47,16 @@ export type Finding = {
   file: string;
   line: number;
   snippet: string;
+  /** 未設定は scanner。ai は AI の追加候補のうち、引用が実在したもの */
+  origin?: "scanner" | "ai";
+  /** AI 由来のとき、運用で何が起きるかの一文 */
+  why?: string;
 };
+
+/** スキャナ由来 (origin が ai でない) の finding だけ */
+export function scannerFindings<F extends { origin?: string }>(fs: F[]): F[] {
+  return fs.filter((f) => f.origin !== "ai");
+}
 
 type Rule = {
   rule: string;
@@ -111,13 +122,13 @@ const ROUTE_RE =
 // str.splitlines() 相当 (\v や \f なども行の区切りとして数える)
 // biome-ignore lint/suspicious/noControlCharactersInRegex: splitlines が区切る制御文字をそのまま使う
 const LINE_BREAK = /\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/;
-function splitLines(text: string): string[] {
+export function splitLines(text: string): string[] {
   const lines = text.split(LINE_BREAK);
   if (lines[lines.length - 1] === "") lines.pop();
   return lines;
 }
 
-function snippet(lines: string[], idx: number, around = 2): string {
+export function snippet(lines: string[], idx: number, around = 2): string {
   const lo = Math.max(0, idx - around);
   const hi = Math.min(lines.length, idx + around + 1);
   const out: string[] = [];
