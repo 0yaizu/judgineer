@@ -86,7 +86,37 @@ function DetailGate({
   const { loading, error, retry } = useDetail(p, issue, onProject);
   if (loading)
     return (
-      <Waiting text="出来事の詳細を書いています" pid={p.id} iid={issue.id} />
+      <div className="grid gap-5">
+        <Crumbs
+          parent={
+            <Link
+              to="/p/$pid"
+              params={{ pid: p.id }}
+              className={crumbLinkClass}
+            >
+              {p.background.title}
+            </Link>
+          }
+          current={`${issue.day}日目の出来事`}
+        />
+        <Card className="bg-warning/10 ring-warning">
+          <CardHeader>
+            <Badge variant="warning" size="sm" className="self-start">
+              運用 {issue.day}日目に発生
+            </Badge>
+            <CardTitle className="text-xl leading-snug">
+              {issue.incident_title}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Waiting
+              text="出来事の詳細を書いています"
+              pid={p.id}
+              iid={issue.id}
+            />
+          </CardContent>
+        </Card>
+      </div>
     );
   if (error)
     return (

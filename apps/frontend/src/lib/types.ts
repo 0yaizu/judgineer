@@ -51,5 +51,15 @@ export type Progress = {
   total?: number;
   chars?: number;
   elapsed?: number;
+  steps?: string[];
+  stats?: {
+    files?: number;
+    languages?: string[];
+    checksCompleted?: number;
+    checksTotal?: number;
+    nodes?: number;
+    edges?: number;
+    flows?: number;
+  };
   partial?: unknown; // 形は lib/partial.ts の readPartial で検査する
 };
