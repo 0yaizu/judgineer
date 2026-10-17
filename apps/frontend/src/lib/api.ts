@@ -39,7 +39,7 @@ async function read<T>(res: Promise<Res>): Promise<T> {
     // detail が無い 502〜504 は、開発サーバーの proxy がバックエンドにつながらなかったとき
     if (r.status >= 502 && r.status <= 504) {
       throw new Disconnected(
-        "バックエンド（127.0.0.1:3001）に接続できません。apps/backend で TARGET_DIR を付けて起動しているか確認してください",
+        "バックエンド（127.0.0.1:3001）に接続できません。バックエンドが起動しているか確認してください",
       );
     }
     throw new Error(`エラーが発生しました（${r.status}）`);
