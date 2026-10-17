@@ -1,7 +1,15 @@
+import type { Background } from "@tka/shared";
 import { and, asc, desc, eq, notInArray, sql } from "drizzle-orm";
 import { db } from "./db";
-import { issues, lessons, messages, projects } from "./db/schema";
-import type { ChatMessage, Lesson, Project, ProjectSummary } from "./types";
+import { apps, issues, lessons, messages, projects } from "./db/schema";
+import type {
+  AppRecord,
+  AppSummary,
+  ChatMessage,
+  Lesson,
+  Project,
+  ProjectSummary,
+} from "./types";
 
 export const newId = (): string =>
   crypto.randomUUID().replaceAll("-", "").slice(0, 10);
@@ -157,6 +165,33 @@ export function listProjects(): ProjectSummary[] {
       decided: mine.filter((i) => i.data.feedback).length,
     };
   });
+}
+
+export function listApps(): AppSummary[] {
+  return db
+    .select()
+    .from(apps)
+    .orderBy(desc(apps.updatedAt))
+    .all()
+    .map((r) => ({
+      id: r.id,
+      title: r.background.title,
+      updated_at: r.updatedAt,
+    }));
+}
+
+export function getApp(id: string): AppRecord | undefined {
+  const r = db.select().from(apps).where(eq(apps.id, id)).get();
+  return r && { id: r.id, updated_at: r.updatedAt, background: r.background };
+}
+
+/** id があればその背景を更新し、無ければ新しいアプリとして登録する */
+export function saveApp(background: Background, id = newId()): void {
+  const set = { background, updatedAt: now() };
+  db.insert(apps)
+    .values({ id, ...set })
+    .onConflictDoUpdate({ target: apps.id, set })
+    .run();
 }
 
 export function listLessons(): Lesson[] {

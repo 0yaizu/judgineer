@@ -161,3 +161,15 @@ export type ProjectSummary = {
   issues: number;
   decided: number;
 };
+
+export type AppSummary = {
+  id: string;
+  title: string;
+  updated_at: string;
+};
+
+export type AppRecord = {
+  id: string;
+  updated_at: string;
+  background: Background;
+};
