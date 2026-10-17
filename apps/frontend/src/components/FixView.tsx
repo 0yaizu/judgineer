@@ -3,16 +3,19 @@ import type { Fix } from "#/lib/types";
 import { ArchDiagram } from "./ArchDiagram";
 import { DiffView } from "./DiffView";
 
-const edgeKey = (e: { from: string; to: string; label: string }) =>
-  `${e.from}>${e.to}:${e.label}`;
+// ノード・線のすべての項目で比べる（名前や向きだけが変わっても「変わった」と出す）
+function archKeys(a: Fix["arch_before"]): Set<string> {
+  return new Set([
+    ...a.nodes.map((n) => JSON.stringify(["n", n.id, n.label, n.kind])),
+    ...a.edges.map((e) =>
+      JSON.stringify(["e", e.from, e.to, e.label, e.direction, e.kind]),
+    ),
+  ]);
+}
 
 function archChanged(fix: Fix): boolean {
-  const ids = (a: Fix["arch_before"]) => [
-    ...a.nodes.map((n) => `n:${n.id}`),
-    ...a.edges.map((e) => `e:${edgeKey(e)}`),
-  ];
-  const before = new Set(ids(fix.arch_before));
-  const after = new Set(ids(fix.arch_after));
+  const before = archKeys(fix.arch_before);
+  const after = archKeys(fix.arch_after);
   return before.size !== after.size || [...before].some((k) => !after.has(k));
 }
 

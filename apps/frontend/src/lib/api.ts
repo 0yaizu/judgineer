@@ -11,7 +11,6 @@ import type {
   Target,
 } from "./types";
 
-// パスは hc<AppType> から作る（ルートの書き間違いを型で検出する）。
 // $url() は new URL() を使うので、相対の "/" ではなくページのオリジンを基準にする
 const origin =
   typeof window === "undefined" ? "http://localhost" : window.location.origin;
@@ -19,10 +18,8 @@ const client = hc<AppType>(origin).api;
 
 type Res = { ok: boolean; status: number; json(): Promise<unknown> };
 
-// 途中で接続が切れた（バックエンドは処理を続けているかもしれない）
 class Disconnected extends Error {}
 
-// エラーのときはバックエンドの detail をそのまま見せる
 async function read<T>(res: Promise<Res>): Promise<T> {
   let r: Res;
   try {
@@ -32,22 +29,26 @@ async function read<T>(res: Promise<Res>): Promise<T> {
       "バックエンドに接続できません。bun run dev が動いているか確認してください",
     );
   }
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    const detail = (body as { detail?: string }).detail;
-    if (detail) throw new Error(detail);
-    // detail が無い 502〜504 は、開発サーバーの proxy がバックエンドにつながらなかったとき
-    if (r.status >= 502 && r.status <= 504) {
+  let body: unknown;
+  try {
+    body = await r.json();
+  } catch {
+    // 本文が読めない: proxy がバックエンドにつながらなかった（502〜504）か、途中で接続が切れた
+    if (r.ok || (r.status >= 502 && r.status <= 504)) {
       throw new Disconnected(
-        "バックエンド（127.0.0.1:3001）に接続できません。バックエンドが起動しているか確認してください",
+        "バックエンド（127.0.0.1:3001）との接続が切れました。バックエンドが起動しているか確認してください",
       );
     }
     throw new Error(`エラーが発生しました（${r.status}）`);
   }
+  if (!r.ok) {
+    const detail = (body as { detail?: string } | null)?.detail;
+    throw new Error(detail ?? `エラーが発生しました（${r.status}）`);
+  }
   return body as T;
 }
 
-// 本文はルート側で readBody が検査するので、hc の型には載らない。URL だけ hc から作って送る
+// 本文は hc の型に載らない（ルート側の readBody で検査する）ので、URL だけ hc から作る
 const post = <T>(url: URL, data: unknown) =>
   read<T>(
     fetch(url, {
@@ -60,8 +61,7 @@ const post = <T>(url: URL, data: unknown) =>
 const projectApi = client.projects[":pid"];
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// 台本づくりは1〜2分かかる。待っている間に接続が切れても、バックエンドは処理を続けているので
-// 進み具合が消える（＝終わる）まで待ってから、結果を読み直す
+// 接続が切れてもバックエンドは台本づくりを続けるので、終わるのを待って読み直す
 async function analyze(pid: string): Promise<ProjectView> {
   try {
     return await read<ProjectView>(

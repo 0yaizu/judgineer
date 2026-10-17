@@ -116,7 +116,6 @@ function Home() {
       .catch((e: Error) => setError(e.message));
   }, []);
 
-  // 登録（コードのコピーと機械的なチェック）→ 台本づくり（AI）
   const submit = async () => {
     setBusy(true);
     setError("");

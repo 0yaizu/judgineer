@@ -281,7 +281,6 @@ function Simulation({
     setBusy(false);
   };
 
-  // 台本がまだ無い（台本づくりが途中で失敗した）ときに作り直す
   const reanalyze = async () => {
     setBusy(true);
     setError("");

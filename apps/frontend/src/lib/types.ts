@@ -1,4 +1,3 @@
-// 画面で使う型。API が返すものはバックエンドの型をそのまま使う（二重に定義しない）
 import type {
   ChatMessage,
   ChatPhase,
@@ -27,7 +26,7 @@ export type ArchNode = Architecture["nodes"][number];
 export type FileDiff = Fix["diffs"][number];
 export type Finding = Project["findings"][number];
 
-/** GET /api/projects/:pid などが返す形（DB に無い項目をルートが足している） */
+// DB に無い項目をルートが足している
 export type ProjectView = Project & {
   sim_days: number;
   related_lessons: Lesson[];

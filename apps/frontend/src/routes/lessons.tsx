@@ -50,7 +50,6 @@ function Lessons() {
                   to="/p/$pid/i/$iid"
                   params={{
                     pid: l.project_id,
-                    // id は「プロジェクトid-出来事id」
                     iid: l.id.split("-").pop() ?? "",
                   }}
                   className="underline"

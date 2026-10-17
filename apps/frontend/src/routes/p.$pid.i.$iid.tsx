@@ -79,7 +79,6 @@ function IssueRoute() {
   );
 }
 
-/** いまどの段階か（上の 調べる・決める・直す・振り返る） */
 function stepOf(i: Issue, busy: Busy): number {
   if (busy === "commit") return 2;
   switch (i.phase) {
@@ -172,7 +171,6 @@ function IssuePage({
     setPlan(issue.plan_draft?.plan ?? "");
   }, [issue.plan_draft?.plan]);
 
-  // 新しい発言が来たら、会話のいちばん下まで送る
   // biome-ignore lint/correctness/useExhaustiveDependencies: 発言の数と待ち状態が変わったときだけ動かす
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -197,7 +195,6 @@ function IssuePage({
     const t = text.trim();
     if (!hint && !t) return;
     const before = issue;
-    // 送った言葉はすぐに会話に出す（返事を待つあいだも見えるように）
     if (t)
       setIssue({ ...issue, chat: [...issue.chat, { role: "user", text: t }] });
     setText("");
@@ -359,7 +356,6 @@ function IssuePage({
       <div
         className={`grid items-start gap-6 ${showChat ? "lg:grid-cols-[minmax(0,1.15fr)_minmax(22rem,1fr)]" : ""}`}
       >
-        {/* 根拠 */}
         <section className="grid min-w-0 gap-4" aria-label="根拠">
           <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
             <TabsList>
@@ -448,8 +444,6 @@ function IssuePage({
             </details>
           )}
         </section>
-
-        {/* 会話 */}
         {showChat && (
           <section
             aria-label="先輩・関係者との会話"

@@ -6,10 +6,7 @@ import type { Finding } from "#/lib/types";
 
 const SCROLL_MARGIN = 90;
 
-/**
- * 根拠になったコード。ファイルはバックエンドから読む（登録時のコピー）。
- * hideLabels: 検出ルールの名前を隠す。会話で自分で原因にたどり着くまで、答えを見せない
- */
+// hideLabels: 自分で原因にたどり着くまで、検出ルールの名前を見せない
 export function CodeView({
   pid,
   findings,
@@ -35,7 +32,6 @@ export function CodeView({
 
   const text = file ? content[file] : undefined;
 
-  // ファイルが読めたら、最初の該当行が見える位置までスクロールする
   useEffect(() => {
     if (text === undefined) return;
     const el = bodyRef.current?.querySelector<HTMLElement>("[data-hit]");
@@ -44,7 +40,6 @@ export function CodeView({
   }, [text]);
 
   if (!file) return null;
-  // 表示中のファイルの指摘を、行ごとにまとめる（同じ行に複数あり得る）
   const hits = new Map<number, Finding[]>();
   for (const f of findings.filter((x) => x.file === file))
     hits.set(f.line, [...(hits.get(f.line) ?? []), f]);

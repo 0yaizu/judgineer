@@ -18,7 +18,6 @@ export const issueState = (i: Issue): IssueState =>
         ? "skipped"
         : "open";
 
-/** 決めた直し方の名前 */
 export const chosenLabel = (i: Issue) => i.chosen?.label ?? "前の修正";
 
 /** 最初に止まる日（まだ決めていない出来事の日。なければ最終日） */
