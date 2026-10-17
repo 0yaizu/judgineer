@@ -106,6 +106,8 @@ export const api = {
     url.search = new URLSearchParams({ path, version }).toString();
     return read<{ path: string; content: string }>(fetch(url));
   },
+  detail: (pid: string, iid: string) =>
+    read<Issue>(issueApi.detail.$post(ip(pid, iid))),
   chatStart: (pid: string, iid: string) =>
     read<Issue>(issueApi.chat.start.$post(ip(pid, iid))),
   chat: (pid: string, iid: string, text: string, hint = false) =>

@@ -35,6 +35,7 @@ import { Waiting } from "#/components/Waiting";
 import { api } from "#/lib/api";
 import { chosenLabel, limitDay, MIN_PLAN } from "#/lib/judge";
 import type { ChatMessage, Issue, ProjectView } from "#/lib/types";
+import { useDetail } from "#/lib/useDetail";
 import { useProject } from "#/lib/useProject";
 
 export const Route = createFileRoute("/p/$pid/i/$iid")({
@@ -69,12 +70,36 @@ function IssueRoute() {
       </div>
     );
   }
+  return <DetailGate p={p} issue={issue} onProject={setProject} />;
+}
+
+// 本文が未生成の出来事は、作ってから開く (空の本文を見せない)
+function DetailGate({
+  p,
+  issue,
+  onProject,
+}: {
+  p: ProjectView;
+  issue: Issue;
+  onProject: (p: ProjectView) => void;
+}) {
+  const { loading, error, retry } = useDetail(p, issue, onProject);
+  if (loading) return <Waiting text="出来事の詳細を書いています" />;
+  if (error)
+    return (
+      <div className="grid gap-4">
+        <ErrorBox message={error} />
+        <Button variant="primary" className="self-start" onClick={retry}>
+          もう一度試す
+        </Button>
+      </div>
+    );
   return (
     <IssuePage
-      key={`${pid}/${iid}`}
+      key={`${p.id}/${issue.id}`}
       p={p}
       issue={issue}
-      onProject={setProject}
+      onProject={onProject}
     />
   );
 }
