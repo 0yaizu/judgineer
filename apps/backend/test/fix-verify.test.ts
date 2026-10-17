@@ -11,9 +11,9 @@ import {
 
 installFakeAI();
 
-// samples/a_company_api/app.py: I1 = F1 (16行目 CORS *)、I2 = F2 (22行目 APIキー直書き, day 40)
-const CORS_LINE = 16;
-const KEY_LINE = 22;
+// samples/a_company_api/app.py: I1 = F1 (14行目 CORS *)、I2 = F2 (20行目 APIキー直書き, day 40)
+const CORS_LINE = 14;
+const KEY_LINE = 20;
 const FIXED_CORS = 'CORS(app, origins="https://b-company.example")';
 const FIXED_KEY = 'PARTNER_API_KEY = os.environ["PARTNER_API_KEY"]';
 
@@ -70,7 +70,7 @@ test("直していない (コメントを足しただけ) と、残っている�
   expect(v?.resolved).toEqual([]);
   expect(v?.remaining).toEqual(["F1"]);
   const text = r.data.issue.chat.filter((m) => m.kind === "fix").at(-1)?.text;
-  expect(text).toContain("app.py 16行目付近");
+  expect(text).toContain("app.py 14行目付近");
 });
 
 test("修正で新しい指摘が増えたら introduced に出る", async () => {
@@ -80,7 +80,7 @@ test("修正で新しい指摘が増えたら introduced に出る", async () =>
     change(KEY_LINE, 'PARTNER_API_KEY = "another-hardcoded-key"'),
   ]);
   const r = await commit(p);
-  // 22行目は元の F2 と同じルールに当たり続けるので remaining。新規ではない
+  // 20行目は元の F2 と同じルールに当たり続けるので remaining。新規ではない
   expect(r.data.issue.fix?.verification?.introduced).toEqual([]);
   fakeApply([change(CORS_LINE, `${FIXED_CORS}\nDEBUG = True`)]);
   const r2 = await commit(p);

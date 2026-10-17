@@ -91,6 +91,12 @@ const RULES: Rule[] = [
       /(log(ger)?\.\w+|print|console\.log)\s*\(.*(email|phone|tel|address|password)/i,
   },
   {
+    rule: "relative-path",
+    title: "ファイルの場所を相対パスで書いている（起動する場所によって変わる）",
+    pattern:
+      /\b\w*(path|file|dir)\w*\s*=\s*["'](?![/~$]|[A-Za-z]:)[^"'\s{}]+\.(db|sqlite3?|json|csv|log|txt)["']/i,
+  },
+  {
     rule: "select-all-columns",
     title: "全カラム（SELECT *）をそのまま返している",
     pattern: /SELECT\s+\*\s+FROM/i,
