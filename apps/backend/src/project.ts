@@ -1,10 +1,11 @@
-import { existsSync, statSync } from "node:fs";
+import { cpSync, existsSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
-import { type Incident, SIM_DAYS } from "@tka/shared";
+import { type Background, type Incident, SIM_DAYS } from "@tka/shared";
 import { cleanSignals } from "./clean";
-import { config } from "./config";
+import { config, REPO_ROOT } from "./config";
 import { HttpError } from "./http";
 import * as repo from "./repo";
+import { extractFeatures, scan, snapshotTarget } from "./scanner";
 import type { Issue, Lesson, Project } from "./types";
 
 const projectDir = (pid: string) => join(config.dataDir, "projects", pid);
@@ -22,6 +23,33 @@ export function inside(root: string, rel: string): string | null {
 
 export const isFile = (path: string) =>
   existsSync(path) && statSync(path).isFile();
+
+/** 検査対象を取り込んで、分析前のプロジェクトを作って保存する */
+export function createProject(bg: Background): Project {
+  const id = repo.newId();
+  const src = srcDir(id);
+  // dataDir が検査対象の中にあっても、コピーが自分自身を取り込まないようにする
+  snapshotTarget(config.targetDir, src, [REPO_ROOT, config.dataDir]);
+  cpSync(src, currentDir(id), { recursive: true });
+  const project: Project = {
+    id,
+    created_at: repo.now(),
+    background: bg,
+    source: "target",
+    findings: scan(src),
+    features: extractFeatures(src),
+    issues: [],
+    architecture: { nodes: [], edges: [] },
+    flows: [],
+    dismissed: [],
+    uncovered_features: [],
+    assumed_users: null,
+    sim_day: 0,
+    analyzed_by: null,
+  };
+  repo.saveProject(project);
+  return project;
+}
 
 export function loadProject(pid: string): Project {
   const p = repo.getProject(pid);
