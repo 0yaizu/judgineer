@@ -13,8 +13,10 @@ export type GoldenFinding = {
   note: string;
 };
 
-/** 意図して入れた欠陥のうち、スキャナのルールが拾わないもの */
+/** 意図して入れた欠陥のうち、スキャナのルールが拾わないもの。by_ai が true のものは AI の追加候補で見つかるはずなので gaps_found で見る */
 export type KnownGap = {
+  /** AI の追加候補で見つかるはずか (既定 true)。false は「ここでは確かめられない」もの */
+  by_ai?: boolean;
   /** 欠陥のある行に含まれる文字列。題材から消えたらテストが気づく */
   match: string;
   file: string;
@@ -22,9 +24,13 @@ export type KnownGap = {
   note: string;
 };
 
+/** 意図した一覧には無かったが、題材に実在する欠陥で、AI が見つけてよいもの (ai_extras の警告から外す) */
+export type AcceptedExtra = { match: string; file: string; note: string };
+
 export type Golden = {
   findings: GoldenFinding[];
   known_gaps?: KnownGap[];
+  accepted_extras?: AcceptedExtra[];
   arch: { kinds: NodeKind[] };
   /** 本文に書いてはいけない原因の名前 (原因は読み手が推理するもの) */
   cause_words: string[];
@@ -130,7 +136,20 @@ export const aCompanyApi: Golden = {
       match: "flask-cors==4.0.1",
       file: "requirements.txt",
       title: "既知の脆弱性がある版に固定している",
+      by_ai: false,
       note: "ここでは確かめられない。flask 3.0.3 と flask-cors 4.0.1 に公開済みの脆弱性がある(PyPI の脆弱性情報で確認済み)",
+    },
+  ],
+  accepted_extras: [
+    {
+      match: 'name = request.args.get("name", "")',
+      file: "app.py",
+      note: "name が空だと LIKE '%%' になり、全顧客が返る",
+    },
+    {
+      match: ").fetchall()",
+      file: "app.py",
+      note: "件数の上限・ページ分けがなく、全件をメモリに読んで返す(purchases と search)",
     },
   ],
   arch: { kinds: ["internal", "db", "partner"] },

@@ -1,7 +1,7 @@
 import { SIM_DAYS } from "@tka/shared";
-import { type Finding, findingLine } from "../src/scanner";
+import { type Finding, findingLine, scannerFindings } from "../src/scanner";
 import type { Issue, Project } from "../src/types";
-import type { Golden, GoldenFinding } from "./golden";
+import type { Golden, GoldenFinding, KnownGap } from "./golden";
 
 export type Check = {
   name: string;
@@ -49,7 +49,11 @@ export function score(p: Project, golden: Golden): Check[] {
       detail: problems.length === 0 ? ok : problems.join(" / "),
     });
 
-  const { byId, missing, extra } = pair(p, golden);
+  // AI の追加分は別のチェック (gaps_found / ai_extras) で見る
+  const { byId, missing, extra } = pair(
+    { ...p, findings: scannerFindings(p.findings) },
+    golden,
+  );
   add("findings_match", "fail", [
     ...(missing.length ? [`不足: ${missing.join(", ")}`] : []),
     ...(extra.length ? [`余り: ${extra.join(", ")}`] : []),
@@ -63,6 +67,36 @@ export function score(p: Project, golden: Golden): Check[] {
     p.findings
       .filter((f) => !inIssue.has(f.id) && !dismissed.has(f.id))
       .map((f) => `${f.id}:${f.rule}`),
+  );
+
+  const aiFound = p.findings.filter((f) => f.origin === "ai");
+  const gaps = (golden.known_gaps ?? []).filter((g) => g.by_ai !== false);
+  const hits = (g: KnownGap) =>
+    aiFound.filter((f) => f.file === g.file && f.snippet.includes(g.match));
+  const lostGaps = gaps.filter((g) => hits(g).length === 0);
+  add(
+    "gaps_found",
+    "warn",
+    lostGaps.length
+      ? [
+          `見つかった ${gaps.length - lostGaps.length} / ${gaps.length}（なし: ${lostGaps.map((g) => g.title).join("、")}）`,
+        ]
+      : [],
+    `見つかった ${gaps.length} / ${gaps.length}`,
+  );
+  add(
+    "ai_extras",
+    "warn",
+    aiFound
+      .filter((f) => !gaps.some((g) => hits(g).includes(f)))
+      .filter(
+        (f) =>
+          !(golden.accepted_extras ?? []).some(
+            (x) => x.file === f.file && f.snippet.includes(x.match),
+          ),
+      )
+      .map((f) => `${f.file}:${f.line} ${f.title}`),
+    "なし",
   );
 
   const must = [...byId].filter(([, g]) => g.expect === "issue");

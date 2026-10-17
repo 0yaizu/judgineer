@@ -70,10 +70,10 @@ if (runs > 1) {
   for (const [name, t] of tally)
     console.log(`${name.padEnd(18)} ${t.ok}/${runs} (${t.level})`);
 }
-const gaps = aCompanyApi.known_gaps ?? [];
+const gaps = (aCompanyApi.known_gaps ?? []).filter((g) => g.by_ai === false);
 if (gaps.length) {
   console.log(
-    `--- 未対応の既知の欠陥 ${gaps.length}件 (スキャナが拾わないので採点外) ---`,
+    `--- 未対応の既知の欠陥 ${gaps.length}件 (ここでは確かめられないので採点外) ---`,
   );
   for (const g of gaps) console.log(`-  ${g.file}  ${g.title}`);
 }
