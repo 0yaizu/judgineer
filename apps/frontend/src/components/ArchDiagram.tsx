@@ -18,11 +18,14 @@ const KIND_LABEL: Record<ArchNode["kind"], string> = {
 
 // 色はモックに合わせる
 const KIND_CLASS: Record<ArchNode["kind"], string> = {
-  internal: "fill-tint stroke-[#9fc8b6]",
-  db: "fill-[#f1f4f7] stroke-[#b6c0ca]",
-  partner: "fill-[#eef3fa] stroke-[#a9bfdc]",
-  person: "fill-white stroke-[#c9d0d6]",
-  external: "fill-white stroke-[#9aa5b1] [stroke-dasharray:5_4]",
+  internal: "fill-tint stroke-[#9fc8b6] dark:stroke-[#2f6b58]",
+  db: "fill-[#f1f4f7] stroke-[#b6c0ca] dark:fill-[#1a2126] dark:stroke-[#4a5761]",
+  partner:
+    "fill-[#eef3fa] stroke-[#a9bfdc] dark:fill-[#19232e] dark:stroke-[#3d5878]",
+  person:
+    "fill-white stroke-[#c9d0d6] dark:fill-[#161c20] dark:stroke-[#4a5761]",
+  external:
+    "fill-white stroke-[#9aa5b1] [stroke-dasharray:5_4] dark:fill-[#161c20] dark:stroke-[#6b7782]",
 };
 
 type Pt = { x: number; y: number };
@@ -177,7 +180,7 @@ export function ArchDiagram({
               ? "stroke-error stroke-[2.2] [stroke-dasharray:6_4] animate-[arch-dash_0.8s_linear_infinite]"
               : st === "live"
                 ? "stroke-primary stroke-[2.2]"
-                : "stroke-[#b6c0ca] stroke-[1.6]";
+                : "stroke-[#b6c0ca] stroke-[1.6] dark:stroke-[#4a5761]";
           return (
             <g key={edgeKey(e)} className={`transition-opacity ${focus}`}>
               <path
@@ -268,7 +271,7 @@ export function ArchDiagram({
               className={`flex flex-wrap items-baseline gap-x-3 ${edgeState(e, i) === "bad" ? "text-error" : "text-sub"}`}
             >
               <span
-                className={`flex size-[18px] items-center justify-center rounded-full border text-[10.5px] font-bold ${edgeState(e, i) === "bad" ? "border-error bg-error text-white" : "border-[#9aa5b1]"}`}
+                className={`flex size-[18px] items-center justify-center rounded-full border text-[10.5px] font-bold ${edgeState(e, i) === "bad" ? "border-error bg-error text-white" : "border-[#9aa5b1] dark:border-[#6b7782]"}`}
               >
                 {i + 1}
               </span>

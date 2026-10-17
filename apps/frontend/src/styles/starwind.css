@@ -130,33 +130,38 @@
 }
 
 .dark {
-  --background: var(--color-neutral-950);
-  --foreground: var(--color-neutral-50);
-  --card: var(--color-neutral-900);
-  --card-foreground: var(--color-neutral-50);
-  --popover: var(--color-neutral-900);
-  --popover-foreground: var(--color-neutral-50);
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-neutral-50);
-  --primary-accent: var(--color-blue-400);
-  --secondary: var(--color-neutral-800);
-  --secondary-foreground: var(--color-neutral-50);
-  --secondary-accent: var(--color-neutral-50);
-  --muted: var(--color-neutral-800);
-  --muted-foreground: var(--color-neutral-400);
-  --accent: var(--color-neutral-700);
-  --accent-foreground: var(--color-neutral-50);
-  --info: var(--color-sky-300);
-  --info-foreground: var(--color-sky-950);
-  --success: var(--color-green-300);
-  --success-foreground: var(--color-green-950);
-  --warning: var(--color-amber-300);
-  --warning-foreground: var(--color-amber-950);
-  --error: var(--color-red-800);
-  --error-foreground: var(--color-neutral-50);
-  --border: --alpha(var(--color-neutral-50) / 10%);
-  --input: --alpha(var(--color-neutral-50) / 15%);
-  --outline: var(--color-neutral-500);
+  --background: #0f1417;
+  --foreground: #e6ebef;
+  --card: #161c20;
+  --card-foreground: #e6ebef;
+  --popover: #161c20;
+  --popover-foreground: #e6ebef;
+  --primary: #2a9d78;
+  --primary-foreground: #ffffff;
+  --primary-accent: #5fcfa8;
+  --secondary: #161c20;
+  --secondary-foreground: #e6ebef;
+  --secondary-accent: #e6ebef;
+  --muted: #1a2126;
+  --muted-foreground: #98a4af;
+  --accent: #1c2a26;
+  --accent-foreground: #5fcfa8;
+  --info: #19232e;
+  --info-foreground: #e6ebef;
+  --success: #1c2a26;
+  --success-foreground: #5fcfa8;
+  --warning: #2d2019;
+  --warning-foreground: #ff9b85;
+  --error: #e8704f;
+  --error-foreground: #0f1417;
+  --border: #2b353c;
+  --input: #2b353c;
+  --outline: #98a4af;
+
+  --sub: #aab5bf;
+  --line-soft: #222b31;
+  --tint: #172a24;
+  --warn-tint: #2d2019;
 
   /* sidebars variables */
   --sidebar-background: var(--color-neutral-900);
@@ -192,4 +197,17 @@
   to {
     stroke-dashoffset: -20;
   }
+}
+
+/* テーマ切り替えの間だけ、色を 0.7 秒かけてゆっくり変える（ふだんのホバーなどには影響させない） */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition:
+    background-color 0.7s ease,
+    border-color 0.7s ease,
+    color 0.7s ease,
+    fill 0.7s ease,
+    stroke 0.7s ease;
 }

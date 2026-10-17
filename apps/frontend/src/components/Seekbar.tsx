@@ -25,10 +25,10 @@ const STATE_TEXT = {
 };
 const STATE_MARK = { open: "!", done: "✓", avoided: "◎", skipped: "–" };
 const STATE_CLASS = {
-  open: "border-white bg-error text-white animate-pulse",
-  done: "border-white bg-primary text-white",
-  avoided: "border-primary bg-white text-primary",
-  skipped: "border-muted-foreground bg-white text-sub",
+  open: "border-background bg-error text-white animate-pulse",
+  done: "border-background bg-primary text-white",
+  avoided: "border-primary bg-background text-primary",
+  skipped: "border-muted-foreground bg-background text-sub",
 };
 
 const BLOCKED_MS = 1800;
