@@ -96,6 +96,8 @@ export const api = {
   analyze,
   progress: (pid: string) =>
     read<Progress>(projectApi.progress.$get({ param: { pid } })),
+  issueProgress: (pid: string, iid: string) =>
+    read<Progress>(issueApi.progress.$get(ip(pid, iid))),
   setSimDay: (pid: string, day: number) =>
     post<{ sim_day: number; limit: number }>(
       projectApi.sim.$url({ param: { pid } }),

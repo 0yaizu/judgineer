@@ -84,7 +84,10 @@ function DetailGate({
   onProject: (p: ProjectView) => void;
 }) {
   const { loading, error, retry } = useDetail(p, issue, onProject);
-  if (loading) return <Waiting text="出来事の詳細を書いています" />;
+  if (loading)
+    return (
+      <Waiting text="出来事の詳細を書いています" pid={p.id} iid={issue.id} />
+    );
   if (error)
     return (
       <div className="grid gap-4">

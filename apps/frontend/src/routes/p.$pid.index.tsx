@@ -397,7 +397,11 @@ function Simulation({
               </CardHeader>
               <CardContent className="grid gap-3 text-sm">
                 {detail.loading ? (
-                  <Waiting text="出来事の詳細を書いています" />
+                  <Waiting
+                    text="出来事の詳細を書いています"
+                    pid={pid}
+                    iid={current.id}
+                  />
                 ) : detail.error ? (
                   <>
                     <ErrorBox message={detail.error} />

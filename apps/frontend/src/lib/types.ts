@@ -51,4 +51,5 @@ export type Progress = {
   total?: number;
   chars?: number;
   elapsed?: number;
+  partial?: unknown; // 形は lib/partial.ts の readPartial で検査する
 };
