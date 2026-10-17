@@ -19,13 +19,16 @@ const client = hc<AppType>(origin).api;
 
 type Res = { ok: boolean; status: number; json(): Promise<unknown> };
 
+// 途中で接続が切れた（バックエンドは処理を続けているかもしれない）
+class Disconnected extends Error {}
+
 // エラーのときはバックエンドの detail をそのまま見せる
 async function read<T>(res: Promise<Res>): Promise<T> {
   let r: Res;
   try {
     r = await res;
   } catch {
-    throw new Error(
+    throw new Disconnected(
       "バックエンドに接続できません。bun run dev が動いているか確認してください",
     );
   }
@@ -35,7 +38,7 @@ async function read<T>(res: Promise<Res>): Promise<T> {
     if (detail) throw new Error(detail);
     // detail が無い 502〜504 は、開発サーバーの proxy がバックエンドにつながらなかったとき
     if (r.status >= 502 && r.status <= 504) {
-      throw new Error(
+      throw new Disconnected(
         "バックエンド（127.0.0.1:3001）に接続できません。apps/backend で TARGET_DIR を付けて起動しているか確認してください",
       );
     }
@@ -55,6 +58,29 @@ const post = <T>(url: URL, data: unknown) =>
   );
 
 const projectApi = client.projects[":pid"];
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// 台本づくりは1〜2分かかる。待っている間に接続が切れても、バックエンドは処理を続けているので
+// 進み具合が消える（＝終わる）まで待ってから、結果を読み直す
+async function analyze(pid: string): Promise<ProjectView> {
+  try {
+    return await read<ProjectView>(
+      projectApi.analyze.$post({ param: { pid } }),
+    );
+  } catch (e) {
+    if (!(e instanceof Disconnected)) throw e;
+    for (let i = 0; i < 300; i++) {
+      const pr = await read<Progress>(
+        projectApi.progress.$get({ param: { pid } }),
+      ).catch(() => null);
+      if (pr && pr.stage === null) break;
+      await sleep(2000);
+    }
+    const p = await read<ProjectView>(projectApi.$get({ param: { pid } }));
+    if (p.analyzed_by) return p;
+    throw e;
+  }
+}
 const issueApi = projectApi.issues[":iid"];
 const ip = (pid: string, iid: string) => ({ param: { pid, iid } });
 
@@ -67,8 +93,7 @@ export const api = {
     read<ProjectView>(projectApi.$get({ param: { pid } })),
   createProject: (background: Background) =>
     post<ProjectView>(client.projects.$url(), { background }),
-  analyze: (pid: string) =>
-    read<ProjectView>(projectApi.analyze.$post({ param: { pid } })),
+  analyze,
   progress: (pid: string) =>
     read<Progress>(projectApi.progress.$get({ param: { pid } })),
   setSimDay: (pid: string, day: number) =>
