@@ -84,6 +84,8 @@ export type IssueData = {
   affected_nodes: string[];
   if_ignored?: IfIgnored;
   stance?: string;
+  // 「決める」に入った最初の発言の位置 (chat の添字)。画面で会話をそこまで遡るのに使う
+  decide_at?: number;
   chosen?: { label: string; change_summary: string };
   // 会話フローでは option_index は常に null
   decision?: {
