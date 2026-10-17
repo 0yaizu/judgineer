@@ -171,5 +171,5 @@ export type AppSummary = {
 export type AppRecord = {
   id: string;
   updated_at: string;
-  background: Background;
+  background: Background | null;
 };

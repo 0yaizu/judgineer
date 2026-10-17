@@ -175,7 +175,7 @@ export function listApps(): AppSummary[] {
     .all()
     .map((r) => ({
       id: r.id,
-      title: r.background.title,
+      title: r.background?.title ?? r.name,
       updated_at: r.updatedAt,
     }));
 }
@@ -187,9 +187,10 @@ export function getApp(id: string): AppRecord | undefined {
 
 /** id があればその背景を更新し、無ければ新しいアプリとして登録する */
 export function saveApp(background: Background, id = newId()): void {
-  const set = { background, updatedAt: now() };
+  const at = now();
+  const set = { name: background.title, background, updatedAt: at };
   db.insert(apps)
-    .values({ id, ...set })
+    .values({ id, createdAt: at, ...set })
     .onConflictDoUpdate({ target: apps.id, set })
     .run();
 }
