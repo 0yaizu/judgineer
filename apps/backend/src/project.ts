@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
-import { type Issue as Incident, SIM_DAYS } from "@tka/shared";
+import { type GeneratedIssue as Incident, SIM_DAYS } from "@tka/shared";
 import { config } from "./config";
 import { HttpError } from "./http";
 import * as repo from "./repo";

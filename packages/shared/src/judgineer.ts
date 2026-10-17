@@ -1,15 +1,11 @@
 import { z } from "zod";
-
-export const backgroundSchema = z.object({
-  title: z.string(),
-  stakeholders: z.string(),
-  data_flow: z.string(),
-  data_types: z.string(),
-  constraints: z.string(),
-  team: z.string(),
-  notes: z.string(),
-});
-export type Background = z.infer<typeof backgroundSchema>;
+import {
+  architectureSchema,
+  backgroundSchema,
+  severitySchema,
+  signalSchema,
+  viewSchema,
+} from "./ai";
 
 export const findingSchema = z.object({
   id: z.string(),
@@ -31,20 +27,6 @@ export const optionSchema = z.object({
   }),
 });
 export type Option = z.infer<typeof optionSchema>;
-
-export const severitySchema = z.enum(["高", "中", "低"]);
-export type Severity = z.infer<typeof severitySchema>;
-
-export const viewSchema = z.enum(["code", "infra"]);
-export type View = z.infer<typeof viewSchema>;
-
-export const signalSchema = z.object({
-  time: z.string(),
-  source: z.string(),
-  level: z.enum(["info", "warn", "error"]),
-  text: z.string(),
-});
-export type Signal = z.infer<typeof signalSchema>;
 
 // サンプルの台本（ルールごとの問題文）
 export const ruleTextSchema = z.object({
@@ -68,26 +50,6 @@ export const incidentTextSchema = z.object({
   affected: z.array(z.string()),
 });
 export type IncidentText = z.infer<typeof incidentTextSchema>;
-
-export const archNodeSchema = z.object({
-  id: z.string(),
-  label: z.string(),
-  kind: z.enum(["internal", "db", "partner", "person", "external"]),
-});
-export type ArchNode = z.infer<typeof archNodeSchema>;
-
-export const archEdgeSchema = z.object({
-  from: z.string(),
-  to: z.string(),
-  label: z.string(),
-});
-export type ArchEdge = z.infer<typeof archEdgeSchema>;
-
-export const architectureSchema = z.object({
-  nodes: z.array(archNodeSchema),
-  edges: z.array(archEdgeSchema),
-});
-export type Architecture = z.infer<typeof architectureSchema>;
 
 export const diffRowSchema = z.object({
   type: z.enum(["hunk", "ctx", "del", "add"]),

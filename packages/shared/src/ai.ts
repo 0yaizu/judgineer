@@ -35,25 +35,33 @@ export const signalSchema = z.object({
 });
 export type Signal = z.infer<typeof signalSchema>;
 
+export const severitySchema = z.enum(["高", "中", "低"]);
+export type Severity = z.infer<typeof severitySchema>;
+
+export const viewSchema = z.enum(["code", "infra"]);
+export type View = z.infer<typeof viewSchema>;
+
+export const archNodeSchema = z.object({
+  id: z.string().describe("英小文字と _ のみ"),
+  label: z.string(),
+  kind: z.enum(NODE_KINDS),
+});
+export type ArchNode = z.infer<typeof archNodeSchema>;
+
+export const archEdgeSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  label: z.string(),
+  direction: z.enum(["one", "both"]),
+  kind: z
+    .enum(["runtime", "ops"])
+    .describe("runtime=動作中の通信・データ / ops=人の作業"),
+});
+export type ArchEdge = z.infer<typeof archEdgeSchema>;
+
 export const architectureSchema = z.object({
-  nodes: z.array(
-    z.object({
-      id: z.string().describe("英小文字と _ のみ"),
-      label: z.string(),
-      kind: z.enum(NODE_KINDS),
-    }),
-  ),
-  edges: z.array(
-    z.object({
-      from: z.string(),
-      to: z.string(),
-      label: z.string(),
-      direction: z.enum(["one", "both"]),
-      kind: z
-        .enum(["runtime", "ops"])
-        .describe("runtime=動作中の通信・データ / ops=人の作業"),
-    }),
-  ),
+  nodes: z.array(archNodeSchema),
+  edges: z.array(archEdgeSchema),
 });
 export type Architecture = z.infer<typeof architectureSchema>;
 
@@ -74,17 +82,18 @@ const incidentFields = {
   incident_title: z.string(),
   incident_story: z.string(),
   signals: z.array(signalSchema),
-  view: z.enum(["code", "infra"]),
+  view: viewSchema,
   affected_nodes: z.array(z.string()),
   title: z.string(),
   category: z.enum(["脆弱性", "バグ", "運用"]),
-  severity: z.enum(["高", "中", "低"]),
+  severity: severitySchema,
   what_happens: z.string(),
   who_is_affected: z.string(),
   background_link: z.string(),
 };
 
-export const issueSchema = z.object({
+// LLM が返す問題。保存用の Issue は judgineer.ts
+export const generatedIssueSchema = z.object({
   finding_ids: z.array(z.string()),
   ...incidentFields,
   if_ignored: z.object({
@@ -96,7 +105,7 @@ export const issueSchema = z.object({
     signals: z.array(signalSchema),
   }),
 });
-export type Issue = z.infer<typeof issueSchema>;
+export type GeneratedIssue = z.infer<typeof generatedIssueSchema>;
 
 export const dismissedSchema = z.object({
   finding_id: z.string(),
@@ -116,7 +125,7 @@ export const flowsResultSchema = z.object({ flows: z.array(flowSchema) });
 export type FlowsResult = z.infer<typeof flowsResultSchema>;
 
 export const issuesResultSchema = z.object({
-  issues: z.array(issueSchema),
+  issues: z.array(generatedIssueSchema),
   dismissed: z.array(dismissedSchema),
 });
 export type IssuesResult = z.infer<typeof issuesResultSchema>;
