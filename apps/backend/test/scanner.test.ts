@@ -17,6 +17,10 @@ import {
   scan,
   snapshotTarget,
 } from "../src/scanner";
+import {
+  AI_REQUIRED_COVERAGE,
+  MECHANICAL_COVERAGE,
+} from "../src/scanner-security";
 
 let root: string;
 beforeEach(() => {
@@ -247,4 +251,441 @@ test("snapshotTarget: 自分自身・node_modules・data・symlink を除いて�
   snapshotTarget(root, dest2, []);
   expect(existsSync(join(dest2, "app/main.py"))).toBe(true);
   expect(existsSync(join(dest2, "snap2"))).toBe(false);
+});
+
+// biome-ignore lint/style/useTemplate: 検査対象の ${...} をテスト自身の補間にしないため分割する
+const jsInterpolation = (name: string) => `$` + `{${name}}`;
+
+// ルールごとの [当たる行, 当たらない行]。書き方でなく危険な操作で当たることを言語別に確かめる
+const RULE_CASES: Record<string, { hit: string[]; miss: string[] }> = {
+  "sql-string-build": {
+    hit: [
+      `db.prepare("SELECT * FROM users WHERE email = '" + email + "'")`,
+      `cur.execute(f"DELETE FROM t WHERE id = {i}")`,
+      `db.query(\`SELECT * FROM t WHERE id = ${jsInterpolation("id")}\`)`,
+      `cursor.execute("SELECT * FROM t WHERE id = %s" % uid)`,
+      `q := "UPDATE t SET a = " + a`,
+      `sql = "INSERT INTO t VALUES ({})".format(v)`,
+    ],
+    miss: [
+      `db.prepare("SELECT * FROM t WHERE id = ?")`,
+      `log("Update failed: " + reason)`,
+      `q = "SELECT * FROM t " + "WHERE id = ?"`,
+      `cur.execute("SELECT * FROM t WHERE name LIKE '%x%'")`,
+      // 同じ行の別のリテラルの連結を、SQL の連結と取り違えない
+      `db.query("SELECT * FROM t WHERE id = ?", id); log("x" + reason)`,
+    ],
+  },
+  "cors-wildcard": {
+    hit: [
+      `app.use(cors({ origin: "*" }))`,
+      `allow_origins=["*"]`,
+      `origins = "*"`,
+      `res.setHeader("Access-Control-Allow-Origin", "*")`,
+    ],
+    miss: [
+      `origin: "https://example.com"`,
+      `allow_origins=["https://example.com"]`,
+      `const star = "*"`,
+    ],
+  },
+  "debug-enabled": {
+    hit: [`app.run(debug=True)`, `const cfg = { debug: true }`, `DEBUG = True`],
+    miss: [`debug: false`, `app.run(debug=False)`, `const debugger_on = 1`],
+  },
+  "weak-password-hash": {
+    hit: [
+      `crypto.createHash("md5").update(password)`,
+      `hashlib.md5(pw.encode())`,
+      `h := sha1.Sum([]byte(passwd))`,
+    ],
+    miss: [
+      `crypto.createHash("md5").update(fileBytes)`,
+      `bcrypt.hash(password, 12)`,
+      `crypto.createHash("sha256").update(password)`,
+    ],
+  },
+  "stack-leak": {
+    hit: [
+      `res.status(500).send(err.stack)`,
+      `return jsonify(error=traceback.format_exc())`,
+      `res.json({ message: error.stack })`,
+    ],
+    miss: [
+      `console.error(err.stack)`,
+      `logger.error(traceback.format_exc())`,
+      `res.status(500).send("error")`,
+    ],
+  },
+  "tls-verification-disabled": {
+    hit: [
+      `requests.get(url, verify=False)`,
+      `const agent = new https.Agent({ rejectUnauthorized: false })`,
+      `TLSClientConfig: &tls.Config{InsecureSkipVerify: true}`,
+    ],
+    miss: [
+      `requests.get(url, verify=True)`,
+      `rejectUnauthorized: true`,
+      `InsecureSkipVerify: false`,
+    ],
+  },
+};
+
+test("ルールごとに、危険な操作の行は当たり、安全な行は当たらない", () => {
+  const cases = Object.entries(RULE_CASES).flatMap(([rule, c]) => [
+    ...c.hit.map((line) => ({ rule, line, want: true })),
+    ...c.miss.map((line) => ({ rule, line, want: false })),
+  ]);
+  cases.forEach((c, i) => {
+    put(`c${i}.ts`, `${c.line}\n`);
+  });
+  const found = new Map<string, Set<string>>();
+  for (const f of scan(root)) {
+    found.set(f.rule, (found.get(f.rule) ?? new Set()).add(f.file));
+  }
+  for (const rule of Object.keys(RULE_CASES)) {
+    const want = cases.flatMap((c, i) =>
+      c.rule === rule && c.want ? [`c${i}.ts`] : [],
+    );
+    expect([...(found.get(rule) ?? [])].sort()).toEqual(want.sort());
+  }
+});
+
+test("scan: 言語固有ルールは対応言語だけで検出する", () => {
+  put("app.py", 'os.system(f"convert {filename}")\n');
+  put(
+    "app.js",
+    `import { exec } from "node:child_process"\nexec(\`convert ${jsInterpolation("filename")}\`)\n`,
+  );
+  put("app.go", "w.Write(debug.Stack())\n");
+  put("not-python.go", 'os.system(f"convert {filename}")\n');
+  put("not-js.py", `exec(\`convert ${jsInterpolation("filename")}\`)\n`);
+  put("safe.py", 'os.system("date")\n');
+  put("safe.js", 'exec("date")\n');
+  put("log.go", "log.Print(string(debug.Stack()))\n");
+
+  const found = scan(root);
+  expect(
+    found.filter((f) => f.rule === "dynamic-shell-command").map((f) => f.file),
+  ).toEqual(["app.js", "app.py"]);
+  expect(
+    found.filter((f) => f.rule === "stack-leak").map((f) => f.file),
+  ).toEqual(["app.go"]);
+});
+
+test("scan: 精度検査で見つかった見落としと誤検知を防ぐ", () => {
+  put("shell.py", 'subprocess.run(f"convert {name}", shell=True)\n');
+  put("secret.go", 'secret := "prod_secret_192837465"\n');
+  put(
+    "child.js",
+    'const { exec: run } = require("child_process")\nrun(command)\n',
+  );
+  put(
+    "namespace.ts",
+    'import * as cp from "node:child_process"\ncp.execSync("convert " + name)\n',
+  );
+  put("regexp.ts", 'const m = TIME_RE.exec(String(value ?? ""))\n');
+  put(
+    "env.ts",
+    'e[0] !== "ANTHROPIC_API_KEY" && e[0] !== "ANTHROPIC_AUTH_TOKEN"\n',
+  );
+
+  const found = scan(root);
+  expect(
+    found.filter((f) => f.rule === "dynamic-shell-command").map((f) => f.file),
+  ).toEqual(["child.js", "namespace.ts", "shell.py"]);
+  expect(
+    found.filter((f) => f.rule === "hardcoded-secret").map((f) => f.file),
+  ).toEqual(["secret.go"]);
+  expect(found.some((f) => f.file === "regexp.ts")).toBe(false);
+  expect(found.some((f) => f.file === "env.ts")).toBe(false);
+});
+
+test("scan: 別ベクトルを入力源と危険な処理の組み合わせで検出する", () => {
+  put("path.py", 'data = open(request.form["filename"], "rb").read()\n');
+  put("ssrf.py", 'response = httpx.post(request.args["callback"])\n');
+  put("deserialize.py", "value = dill.loads(request.get_data())\n");
+  put("redirect.py", 'return redirect(request.values["return_to"])\n');
+  put(
+    "random.py",
+    "def create_session_code():\n    return random.choice(ALPHABET)\n",
+  );
+  put(
+    "archive.py",
+    "archive = tarfile.open(src)\nfor info in archive.getmembers():\n    output = base / info.name\n",
+  );
+
+  put("path.ts", "createReadStream(req.params.file).pipe(reply)\n");
+  put("ssrf.ts", "await axios.post(req.query.webhook)\n");
+  put("code.ts", "const fn = Function(req.body.script)\n");
+  put("redirect.ts", "reply.redirect(req.headers.location)\n");
+  put(
+    "random.ts",
+    'router.post("/otp", (_req, res) => {\n  res.send(String(Math.random()))\n})\n',
+  );
+  put("assign.ts", "Object.assign(account, req.body)\n");
+
+  put("path.go", 'f, _ := os.Open(r.FormValue("path"))\n');
+  put(
+    "ssrf.go",
+    'req, _ := http.NewRequest("GET", r.Header.Get("Target"), nil)\n',
+  );
+  put(
+    "shell.go",
+    'out, _ := exec.CommandContext(ctx, "bash", "-c", r.PostFormValue("script")).Output()\n',
+  );
+  put(
+    "redirect.go",
+    'http.Redirect(w, r, r.FormValue("return_to"), http.StatusSeeOther)\n',
+  );
+  put(
+    "random.go",
+    'import "math/rand"\nfunc newCSRFToken() string {\n return strconv.Itoa(rand.Int())\n}\n',
+  );
+  put(
+    "archive.go",
+    'import "archive/tar"\nfor _, entry := range archive.File {\n path := filepath.Join(dest, entry.Name)\n}\n',
+  );
+
+  const found = scan(root);
+  const byRule = (rule: string) =>
+    found.filter((f) => f.rule === rule).map((f) => f.file);
+  expect(byRule("path-traversal")).toEqual(["path.go", "path.py", "path.ts"]);
+  expect(byRule("ssrf")).toEqual(["ssrf.go", "ssrf.py", "ssrf.ts"]);
+  expect(byRule("unsafe-code-or-data")).toEqual(["code.ts", "deserialize.py"]);
+  expect(byRule("dynamic-shell-command")).toEqual(["shell.go"]);
+  expect(byRule("open-redirect")).toEqual([
+    "redirect.go",
+    "redirect.py",
+    "redirect.ts",
+  ]);
+  expect(byRule("weak-security-randomness")).toEqual([
+    "random.go",
+    "random.py",
+    "random.ts",
+  ]);
+  expect(byRule("archive-path-traversal")).toEqual([
+    "archive.go",
+    "archive.py",
+  ]);
+  expect(byRule("mass-assignment")).toEqual(["assign.ts"]);
+});
+
+test("scan: 別ベクトルでも定数と安全なAPIは検出しない", () => {
+  put("safe-path.py", 'data = open("/srv/public/help.txt", "rb").read()\n');
+  put("safe-http.ts", 'await fetch("https://status.example.com/health")\n');
+  put("safe-json.py", "value = json.loads(request.get_data())\n");
+  put("safe-redirect.go", 'http.Redirect(w, r, "/login", http.StatusFound)\n');
+  put(
+    "safe-random.py",
+    "def reset_token():\n    return secrets.token_urlsafe(32)\n",
+  );
+  put("safe-random.ts", "const token = crypto.randomUUID()\n");
+  put(
+    "safe-random.go",
+    'import "crypto/rand"\nfunc newToken() { rand.Read(buf) }\n',
+  );
+  put("safe-assign.ts", "Object.assign(account, { name: req.body.name })\n");
+  put(
+    "safe-shell.go",
+    'exec.Command("convert", r.FormValue("input"), output).Run()\n',
+  );
+
+  expect(scan(root)).toEqual([]);
+});
+
+test("scan: 同一関数内では入力を代入した変数を危険処理まで追跡する", () => {
+  put(
+    "flow.py",
+    'def download():\n    supplied = request.args["name"]\n    filename = supplied\n    return send_file(BASE / filename)\n',
+  );
+  put(
+    "flow.ts",
+    'app.post("/preview", async (req, res) => {\n  const supplied = req.body.url\n  const target = supplied\n  res.send(await fetch(target))\n})\n',
+  );
+  put(
+    "flow.go",
+    'func next(w http.ResponseWriter, r *http.Request) {\n target := r.FormValue("next")\n http.Redirect(w, r, target, 302)\n}\n',
+  );
+
+  expect(scan(root).map((f) => `${f.file}:${f.rule}:${f.line}`)).toEqual([
+    "flow.go:open-redirect:3",
+    "flow.py:path-traversal:4",
+    "flow.ts:ssrf:4",
+  ]);
+});
+
+test("scan: オブジェクトのフィールドを経由する入力を追跡する", () => {
+  put(
+    "field.py",
+    'def download():\n    state = {}\n    state.path = request.args["name"]\n    return send_file(BASE / state.path)\n',
+  );
+  put(
+    "field.ts",
+    'app.get("/file", (req, res) => {\n  const state = {}\n  state.url = req.query.url\n  fetch(state.url)\n})\n',
+  );
+  put(
+    "field.go",
+    'func download(r *http.Request) {\n var state State\n state.Path = r.FormValue("name")\n os.ReadFile(state.Path)\n}\n',
+  );
+
+  expect(scan(root).map((f) => `${f.file}:${f.rule}`)).toEqual([
+    "field.go:path-traversal",
+    "field.py:path-traversal",
+    "field.ts:ssrf",
+  ]);
+});
+
+test("scan: 同一ファイルの名前付き関数の戻り値を追跡する", () => {
+  put(
+    "return.py",
+    'def input_name():\n    return request.args["name"]\n\ndef identity(value):\n    copy = value\n    return copy\n\ndef download():\n    name = input_name()\n    target = identity(name)\n    return send_file(BASE / target)\n',
+  );
+  put(
+    "return.ts",
+    'function inputUrl() {\n  return req.body.url\n}\nfunction identity(value: string) {\n  return value\n}\napp.get("/proxy", async (_req, res) => {\n  const value = inputUrl()\n  const target = identity(value)\n  res.send(await fetch(target))\n})\n',
+  );
+  put(
+    "return.go",
+    'func inputName(r *http.Request) string {\n return r.FormValue("name")\n}\nfunc identity(value string) string {\n return value\n}\nfunc download(r *http.Request) {\n name := inputName(r)\n target := identity(name)\n os.ReadFile(target)\n}\n',
+  );
+
+  expect(scan(root).map((f) => `${f.file}:${f.rule}`)).toEqual([
+    "return.go:path-traversal",
+    "return.py:path-traversal",
+    "return.ts:ssrf",
+  ]);
+});
+
+test("scan: 無害化して返す関数の戻り値は検出しない", () => {
+  put(
+    "safe-return.py",
+    'def safe(value):\n    return secure_filename(value)\n\ndef download():\n    name = request.args["name"]\n    clean = safe(name)\n    return send_file(BASE / clean)\n',
+  );
+  put(
+    "safe-return.ts",
+    'function safe(value: string) {\n  return path.basename(value)\n}\napp.get("/file", (req, res) => {\n  const name = req.query.name\n  const clean = safe(name)\n  readFile(clean)\n})\n',
+  );
+  put(
+    "safe-return.go",
+    'func safe(value string) string {\n return filepath.Base(value)\n}\nfunc download(r *http.Request) {\n name := r.FormValue("name")\n clean := safe(name)\n os.ReadFile(clean)\n}\n',
+  );
+
+  expect(scan(root)).toEqual([]);
+});
+
+test("scan: JavaScriptの代表的なコールバック引数を追跡する", () => {
+  put(
+    "callback.ts",
+    'app.post("/fetch", (req, res) => {\n  const urls = req.body.urls\n  urls.forEach((url) => {\n    fetch(url)\n  })\n})\n',
+  );
+
+  expect(
+    scan(root).map((finding) => `${finding.file}:${finding.rule}`),
+  ).toEqual(["callback.ts:ssrf"]);
+});
+
+test("scan: 同一モジュールのimportとGoパッケージ内の戻り値を追跡する", () => {
+  put(
+    "lib/input.ts",
+    "export function inputUrl() {\n  return req.body.url\n}\n",
+  );
+  put(
+    "main.ts",
+    'import { inputUrl as loadUrl } from "./lib/input"\napp.get("/proxy", async (_req, res) => {\n  const target = loadUrl()\n  res.send(await fetch(target))\n})\n',
+  );
+  put("helpers.py", 'def input_name():\n    return request.args["name"]\n');
+  put(
+    "main.py",
+    "from helpers import input_name as load_name\n\ndef download():\n    name = load_name()\n    return send_file(BASE / name)\n",
+  );
+  put(
+    "go/input.go",
+    'package api\nfunc inputName(r *http.Request) string {\n return r.FormValue("name")\n}\n',
+  );
+  put(
+    "go/main.go",
+    "package api\nfunc download(r *http.Request) {\n name := inputName(r)\n os.ReadFile(name)\n}\n",
+  );
+
+  expect(
+    scan(root).map((finding) => `${finding.file}:${finding.rule}`),
+  ).toEqual([
+    "go/main.go:path-traversal",
+    "main.py:path-traversal",
+    "main.ts:ssrf",
+  ]);
+});
+
+test("scan: sanitizerと別関数の変数はtaintとして引き継がない", () => {
+  put(
+    "safe.py",
+    'def first():\n    value = request.args["name"]\n    safe = secure_filename(value)\n    return open(BASE / safe)\n\ndef second():\n    return open(BASE / value)\n',
+  );
+  put(
+    "safe.ts",
+    'app.get("/a", (req, res) => {\n const value = req.query.name\n const safe = path.basename(String(value))\n readFile(safe)\n})\napp.get("/inside", (req, res) => {\n const value = req.query.name\n const safe = inside(ROOT, value)\n readFile(safe)\n})\napp.get("/b", (_req, res) => {\n readFile(value)\n})\n',
+  );
+  put(
+    "safe.go",
+    'func first(r *http.Request) {\n value := r.FormValue("name")\n safe := filepath.Base(value)\n os.ReadFile(safe)\n}\nfunc second() {\n os.ReadFile(value)\n}\n',
+  );
+
+  expect(scan(root)).toEqual([]);
+});
+
+test("scanner coverage: 機械検出とAI判断の責務を一覧で固定する", () => {
+  expect(MECHANICAL_COVERAGE).toContain(
+    "入力値の代入・オブジェクトフィールド・if/else分岐から危険処理までの流れ",
+  );
+  expect(MECHANICAL_COVERAGE).toContain(
+    "同一ファイル内の名前付き関数の引数・戻り値を経由するデータフロー",
+  );
+  expect(MECHANICAL_COVERAGE).toContain(
+    "代表的なJavaScriptコールバックと同一モジュールimportを経由するデータフロー",
+  );
+  expect(AI_REQUIRED_COVERAGE).toContain(
+    "利用者・テナント・所有者ごとの認可漏れ（IDORを含む）",
+  );
+  expect(AI_REQUIRED_COVERAGE).toContain(
+    "動的コールバック・複数モジュール・DBをまたぐデータフロー",
+  );
+});
+
+test("scan: 一部の分岐だけで安全化されても危険経路を残す", () => {
+  put(
+    "branch.py",
+    'def download():\n    name = request.args["name"]\n    if trusted:\n        name = secure_filename(name)\n    return send_file(BASE / name)\n',
+  );
+  put(
+    "branch.ts",
+    'app.get("/file", (req, res) => {\n  let name = req.query.name\n  if (trusted) {\n    name = path.basename(String(name))\n  }\n  readFile(name)\n})\n',
+  );
+  put(
+    "branch.go",
+    'func download(r *http.Request) {\n name := r.FormValue("name")\n if trusted {\n  name = filepath.Base(name)\n }\n os.ReadFile(name)\n}\n',
+  );
+
+  expect(scan(root).map((f) => `${f.file}:${f.rule}`)).toEqual([
+    "branch.go:path-traversal",
+    "branch.py:path-traversal",
+    "branch.ts:path-traversal",
+  ]);
+});
+
+test("scan: ifとelseの全経路で安全化されれば検出しない", () => {
+  put(
+    "branch.py",
+    'def download():\n    name = request.args["name"]\n    if windows:\n        name = secure_filename(name)\n    else:\n        name = basename(name)\n    return send_file(BASE / name)\n',
+  );
+  put(
+    "branch.ts",
+    'app.get("/file", (req, res) => {\n  let name = req.query.name\n  if (windows) {\n    name = path.basename(String(name))\n  } else {\n    name = safeJoin(ROOT, String(name))\n  }\n  readFile(name)\n})\n',
+  );
+  put(
+    "branch.go",
+    'func download(r *http.Request) {\n name := r.FormValue("name")\n if windows {\n  name = filepath.Base(name)\n } else {\n  name = resolveWithin(root, name)\n }\n os.ReadFile(name)\n}\n',
+  );
+
+  expect(scan(root)).toEqual([]);
 });
