@@ -12,7 +12,6 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  id-token: write
   actions: read
 
 concurrency:
@@ -38,7 +37,8 @@ jobs:
       # PR のコードを権限付きで実行しないよう、bun run / install は許可しない。検査は ci.yml が PR 上で行う
       - uses: anthropics/claude-code-action@f27be6b65a4652f08a2ba3cff79114829b588967 # v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_args: |
             --allowedTools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh issue view:*)"
             --append-system-prompt "日本語で答える。まず AGENTS.md を読み、設計ルールに従う。依頼されたことだけ行い、コードを読めば分かる説明は書かない。コードを実行できないので、変更後の検査は CI の結果に任せる。作者の意図が不明なら、推測で進めず質問する。"
