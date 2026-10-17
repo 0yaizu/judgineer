@@ -3,10 +3,9 @@ import {
   archEdgeSchema,
   archNodeSchema,
   type Signal,
-  severitySchema,
   signalSchema,
 } from "@tka/shared";
-import { z } from "zod";
+import type { z } from "zod";
 
 const items = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const field = (v: unknown, k: string): unknown =>
@@ -27,18 +26,6 @@ export function partialArchitecture(raw: unknown): Architecture | undefined {
     (e) => ids.has(e.from) && ids.has(e.to),
   );
   return { nodes, edges };
-}
-
-const outlineSchema = z.object({
-  day: z.number(),
-  title: z.string(),
-  severity: severitySchema,
-  incident_title: z.string(),
-});
-
-/** 途中の issues から、day・title・severity・incident_title が揃ったものだけ */
-export function partialIssues(raw: unknown) {
-  return keep(outlineSchema, field(raw, "issues"));
 }
 
 /** 本文づくりの途中: 読めている incident_story と、揃った signals */

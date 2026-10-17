@@ -20,13 +20,14 @@ import {
 import { prefetch } from "./detail";
 import { extraFindings } from "./extra";
 import { parsePartialJson } from "./partial-json";
-import { partialArchitecture, partialIssues } from "./partial-view";
+import { partialArchitecture } from "./partial-view";
 import {
   endProgress,
   putPartial,
   setChars,
   setPartial,
   setStage as setProgressStage,
+  setProgressStats,
 } from "./progress";
 import { currentDir, loadProject, projectPayload, srcDir } from "./project";
 import {
@@ -43,12 +44,20 @@ import {
   readSources,
   scannerFindings,
 } from "./scanner";
+import { codeInventory } from "./scanner-files";
 import type { Issue, Project } from "./types";
 
 const STEPS = 5;
+const STEP_LABELS = [
+  "検査結果を整理",
+  "機能一覧を抽出",
+  "構成図と追加観点を確認",
+  "利用シナリオを準備",
+  "シミュレーションを準備",
+];
 
 const setStage = (pid: string, step: number, stage: string) =>
-  setProgressStage(pid, step, STEPS, stage);
+  setProgressStage(pid, step, STEPS, stage, STEP_LABELS);
 
 export async function analyze(pid: string) {
   setStage(pid, 1, "コードの指摘を整理しています");
@@ -69,22 +78,9 @@ function reset(p: Project): void {
 async function run(pid: string) {
   const p = loadProject(pid);
   p.findings = scannerFindings(p.findings); // 前回の分析で入った AI 由来の分は捨てる
-  if (p.findings.length === 0) {
-    reset(p);
-    Object.assign(p, {
-      issues: [],
-      analyzed_by: "scanner",
-      architecture: { nodes: [], edges: [] },
-      sim_day: 0,
-      dismissed: [],
-      flows: [],
-      uncovered_features: p.features.map((f) => f.id),
-    });
-    repo.saveProject(p);
-    return projectPayload(p);
-  }
-
+  const scannerFoundNothing = p.findings.length === 0;
   const src = srcDir(pid);
+  setProgressStats(pid, codeInventory(src));
   setStage(pid, 2, "機能一覧を抜き出しています");
   const features = extractFeatures(src);
   // 4回の呼び出しで同じ system を使い、キャッシュを効かせる
@@ -96,8 +92,16 @@ async function run(pid: string) {
   });
 
   setStage(pid, 3, "AIが構成図を考え、追加の指摘を探しています");
-  // arch は findings に依存しないので、追加の指摘探しと並列に呼ぶ
-  const [archRes, extras] = await Promise.all([
+  setProgressStats(pid, { checksCompleted: 0, checksTotal: 2 });
+  const findExtras = () =>
+    extraFindings({
+      root: src,
+      system,
+      existing: p.findings,
+      onProgress: (checksCompleted, checksTotal) =>
+        setProgressStats(pid, { checksCompleted, checksTotal }),
+    });
+  const makeArchitecture = () =>
     generate({
       task: "arch",
       system,
@@ -108,11 +112,35 @@ async function run(pid: string) {
           const architecture = partialArchitecture(parsePartialJson(json));
           return architecture && { architecture };
         }),
-    }),
-    extraFindings({ root: src, system, existing: p.findings }),
-  ]);
+    });
+
+  // arch は findings に依存しないので、追加の指摘探しと並列に呼ぶ
+  const [archRes, extras] = scannerFoundNothing
+    ? [undefined, await findExtras()]
+    : await Promise.all([makeArchitecture(), findExtras()]);
   p.findings.push(...extras);
-  const arch = cleanArchitecture(archRes.architecture);
+  if (p.findings.length === 0) {
+    reset(p);
+    Object.assign(p, {
+      issues: [],
+      analyzed_by: "scanner",
+      architecture: { nodes: [], edges: [] },
+      sim_day: 0,
+      dismissed: [],
+      flows: [],
+      features,
+      uncovered_features: features.map((feature) => feature.id),
+    });
+    repo.saveProject(p);
+    return projectPayload(p);
+  }
+  const architectureResult = archRes ?? (await makeArchitecture());
+  const arch = cleanArchitecture(architectureResult.architecture);
+  setProgressStats(pid, {
+    checksCompleted: 2,
+    nodes: arch.nodes.length,
+    edges: arch.edges.length,
+  });
 
   setStage(pid, 4, "AIが利用シナリオと台本を書いています");
   putPartial(pid, { architecture: arch });
@@ -142,11 +170,6 @@ async function run(pid: string) {
       prompt: issuesPrompt({ findings: p.findings, arch }),
       schema: issuesResultSchema,
       onProgress: onProgress(1),
-      onPartial: (json) =>
-        setPartial(pid, () => ({
-          architecture: arch,
-          issues: partialIssues(parsePartialJson(json)),
-        })),
       signal: ac.signal,
     }),
   ]).catch((e) => {
@@ -157,6 +180,7 @@ async function run(pid: string) {
   const nodeIds = new Set(arch.nodes.map((n) => n.id));
   const featIds = new Set(features.map((f) => f.id));
   p.flows = cleanFlows(flowsRes.flows, arch, featIds);
+  setProgressStats(pid, { flows: p.flows.length });
   // どの flow にも入らなかった機能だけ、AIに1回だけ追加で頼む
   const uncovered = () => {
     const covered = new Set(p.flows.flatMap((f) => f.feature_ids));

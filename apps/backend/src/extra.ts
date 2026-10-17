@@ -54,8 +54,8 @@ export function verifyCandidates(
 }
 
 const FOCUSES = [
-  "入力の検証と結果の確認（未指定・不正な値、処理の結果を見ずに成功を返す条件）",
-  "認証・権限の範囲と、資源の上限（共通キー、全件を返す、件数の上限、ページ分け）",
+  "入力とデータの流れ（未指定・不正な入力、コールバック・関数戻り値・DB保存後の再利用、外部サービスや処理結果の未確認）",
+  "制御と業務上の境界（認証・認可、状態遷移、トランザクション・競合、件数・時間・メモリなどの資源上限）",
 ];
 
 /** AI に追加の候補を出させ、引用が実在するものだけ返す。失敗しても本体の分析は続けたいので、例外は投げない。
@@ -64,7 +64,9 @@ export async function extraFindings(a: {
   root: string;
   system: string;
   existing: Finding[];
+  onProgress?: (completed: number, total: number) => void;
 }): Promise<Finding[]> {
+  let completed = 0;
   const results = await Promise.allSettled(
     FOCUSES.map((focus) =>
       generate({
@@ -72,6 +74,9 @@ export async function extraFindings(a: {
         system: a.system,
         prompt: extraFindingsPrompt({ findings: a.existing, focus }),
         schema: extraFindingsResultSchema,
+      }).finally(() => {
+        completed += 1;
+        a.onProgress?.(completed, FOCUSES.length);
       }),
     ),
   );

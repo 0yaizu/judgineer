@@ -6,6 +6,16 @@ type Progress = {
   chars: number;
   partial?: unknown;
   partialAt: number;
+  steps?: string[];
+  stats?: {
+    files?: number;
+    languages?: string[];
+    checksCompleted?: number;
+    checksTotal?: number;
+    nodes?: number;
+    edges?: number;
+    flows?: number;
+  };
 };
 
 const PARTIAL_INTERVAL_MS = 250;
@@ -19,6 +29,7 @@ export function setStage(
   step: number,
   total: number,
   stage: string,
+  steps?: string[],
 ): void {
   const cur = progress.get(key);
   progress.set(key, {
@@ -27,8 +38,19 @@ export function setStage(
     total,
     started: cur?.started ?? Date.now(),
     chars: cur?.chars ?? 0,
+    partial: cur?.partial,
     partialAt: 0,
+    steps: steps ?? cur?.steps,
+    stats: cur?.stats,
   });
+}
+
+export function setProgressStats(
+  key: string,
+  stats: NonNullable<Progress["stats"]>,
+): void {
+  const cur = progress.get(key);
+  if (cur) cur.stats = { ...cur.stats, ...stats };
 }
 
 export function endProgress(key: string): void {

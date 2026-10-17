@@ -1,9 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  partialArchitecture,
-  partialDetail,
-  partialIssues,
-} from "../src/partial-view";
+import { partialArchitecture, partialDetail } from "../src/partial-view";
 
 test("未完結の node と、既出でない端を持つ edge を捨てる", () => {
   const raw = {
@@ -29,21 +25,6 @@ test("未完結の node と、既出でない端を持つ edge を捨てる", ()
 test("architecture が無ければ undefined", () => {
   expect(partialArchitecture(undefined)).toBeUndefined();
   expect(partialArchitecture({})).toBeUndefined();
-});
-
-test("issues は day・title・severity・incident_title が揃ったものだけ", () => {
-  const raw = {
-    issues: [
-      { day: 3, title: "a", severity: "高", incident_title: "i", extra: 1 },
-      { day: 4, title: "b", severity: "高" },
-      { title: "c", severity: "低", incident_title: "j" },
-      { day: 5, title: "d", severity: "?", incident_title: "k" },
-    ],
-  };
-  expect(partialIssues(raw)).toEqual([
-    { day: 3, title: "a", severity: "高", incident_title: "i" },
-  ]);
-  expect(partialIssues(undefined)).toEqual([]);
 });
 
 test("detail は story と、揃った signals だけ", () => {

@@ -95,6 +95,26 @@ test("観点別に2回呼ばれ、結果が合流して同じ行は1件になる
   for (const p of prompts) expect(p).toContain("今回の観点");
 });
 
+test("機械findingが0件でも追加確認だけは実行し、候補がなければ終了する", async () => {
+  const { pid, p } = await setup();
+  const project = repo.getProject(pid);
+  expect(project).toBeDefined();
+  if (!project) return;
+  repo.saveProject({ ...project, findings: [] });
+  calls.length = 0;
+  overrides.set("extra_findings", () => ({ candidates: [] }));
+
+  const result = await api("POST", `${p}/analyze`);
+
+  expect(result.status).toBe(200);
+  expect(calls.map((call) => call.task)).toEqual([
+    "extra_findings",
+    "extra_findings",
+  ]);
+  expect(result.data.issues).toEqual([]);
+  expect(result.data.analyzed_by).toBe("scanner");
+});
+
 test("1回失敗しても、ほかの観点の結果は採用される", async () => {
   let n = 0;
   overrides.set("extra_findings", () => {
