@@ -14,7 +14,10 @@ export function CodeView({
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const file = findings[0]?.file;
-  const hits = new Map(findings.map((f) => [f.line, f]));
+  // 表示中のコードと同じファイルの指摘だけを、行ごとにまとめる（同じ行に複数あり得る）
+  const inFile = findings.filter((f) => f.file === file);
+  const hits = new Map<number, Finding[]>();
+  for (const f of inFile) hits.set(f.line, [...(hits.get(f.line) ?? []), f]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: 出来事が変わったら、最初の該当行が見える位置までスクロールする
   useEffect(() => {
@@ -30,7 +33,7 @@ export function CodeView({
       <div className="flex items-center gap-2 border-b bg-muted/50 px-3 py-1.5 font-mono text-xs">
         {file}
         <Badge variant="error" size="sm">
-          {findings.length}
+          {inFile.length}
         </Badge>
       </div>
       <section
@@ -54,15 +57,18 @@ export function CodeView({
                 </span>
                 <span className="whitespace-pre">{text || " "}</span>
               </div>
-              {hit && (
-                <div className="flex flex-wrap items-center gap-x-3 border-l-2 border-error bg-error/5 py-1 pr-3 pl-14 text-error">
+              {hit?.map((f) => (
+                <div
+                  key={f.id}
+                  className="flex flex-wrap items-center gap-x-3 border-l-2 border-error bg-error/5 py-1 pr-3 pl-14 text-error"
+                >
                   <IconAlertTriangle className="size-3.5" />
-                  <span className="font-sans text-sm">{hit.title}</span>
+                  <span className="font-sans text-sm">{f.title}</span>
                   <span className="text-muted-foreground">
-                    検出ルール: {hit.rule}
+                    検出ルール: {f.rule}
                   </span>
                 </div>
-              )}
+              ))}
             </Fragment>
           );
         })}
