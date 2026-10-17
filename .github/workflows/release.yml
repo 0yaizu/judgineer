@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+
+      - name: frontend をビルドして固める
+        run: |
+          bun run build
+          tar -czf tka-frontend.tar.gz -C apps/frontend/dist/client .
+
+      - name: backend を OS ごとの単体バイナリにする
+        run: |
+          for target in linux-x64 darwin-arm64 darwin-x64; do
+            bun build --compile --target=bun-$target apps/backend/src/index.ts --outfile tka-backend-$target
+          done
+
+      - name: リリースに添付する
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" tka-frontend.tar.gz tka-backend-* --clobber
