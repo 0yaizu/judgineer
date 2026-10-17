@@ -287,6 +287,15 @@ const summarizedCall = (
     arguments: splitArguments(match[2]),
   };
 };
+
+const objectFields = (value: string) => {
+  const literal = /^\s*\{(.*)\}\s*;?\s*$/.exec(value)?.[1];
+  if (literal === undefined) return [];
+  return literal.split(",").flatMap((field) => {
+    const match = /^\s*(?:["']([^"']+)["']|(\w+))\s*:\s*(.+)\s*$/.exec(field);
+    return match ? [{ name: match[1] ?? match[2], value: match[3] }] : [];
+  });
+};
 const indentation = (line: string) =>
   /^\s*/.exec(line)?.[0].replace(/\t/g, "  ").length ?? 0;
 const isElse = (line: string) => /^\s*(?:}\s*)?(?:else\b|elif\b)/.test(line);
@@ -434,6 +443,27 @@ export function flowFindings(
         tainted.add(assigned.name);
       } else {
         tainted.delete(assigned.name);
+      }
+      if (language === "js") {
+        for (const field of objectFields(assigned.value)) {
+          const fieldName = `${assigned.name}.${field.name}`;
+          const fieldCall = summarizedCall(field.value, summaries);
+          const fieldSummary = fieldCall?.summary;
+          if (
+            SOURCES.js.test(field.value) ||
+            fieldSummary?.source ||
+            [...(fieldSummary?.parameterIndexes ?? [])].some((index) =>
+              [...tainted].some((name) =>
+                containsName(fieldCall?.arguments[index] ?? "", name),
+              ),
+            ) ||
+            [...tainted].some((name) => containsName(field.value, name))
+          ) {
+            tainted.add(fieldName);
+          } else {
+            tainted.delete(fieldName);
+          }
+        }
       }
     }
     if (language === "js") {
