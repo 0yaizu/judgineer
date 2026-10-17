@@ -33,11 +33,41 @@ export const SAMPLE_ARCH: Architecture = {
     { id: "outsider", label: "外部の第三者", kind: "external" },
   ],
   edges: [
-    { from: "a_db", to: "api", label: "顧客・購買データ" },
-    { from: "api", to: "b_batch", label: "毎朝6時 前日分を取得" },
-    { from: "api", to: "b_support", label: "顧客検索" },
-    { from: "api", to: "a_staff", label: "月末 全件書き出し" },
-    { from: "outsider", to: "api", label: "インターネット経由" },
+    {
+      from: "a_db",
+      to: "api",
+      label: "顧客・購買データ",
+      direction: "one",
+      kind: "runtime",
+    },
+    {
+      from: "api",
+      to: "b_batch",
+      label: "毎朝6時 前日分を取得",
+      direction: "one",
+      kind: "runtime",
+    },
+    {
+      from: "api",
+      to: "b_support",
+      label: "顧客検索",
+      direction: "one",
+      kind: "runtime",
+    },
+    {
+      from: "api",
+      to: "a_staff",
+      label: "月末 全件書き出し",
+      direction: "one",
+      kind: "ops",
+    },
+    {
+      from: "outsider",
+      to: "api",
+      label: "インターネット経由",
+      direction: "one",
+      kind: "runtime",
+    },
   ],
 };
 
