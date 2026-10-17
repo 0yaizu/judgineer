@@ -92,7 +92,7 @@ const incidentFields = {
   background_link: z.string(),
 };
 
-// LLM が返す問題。保存用の Issue は judgineer.ts
+// LLM が返す問題。保存用の Issue は backend の types.ts
 export const generatedIssueSchema = z.object({
   finding_ids: z.array(z.string()),
   ...incidentFields,

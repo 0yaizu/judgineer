@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { ErrorBox } from "#/components/ErrorBox";
 import {
   Card,
   CardContent,
@@ -6,12 +8,22 @@ import {
   CardHeader,
   CardTitle,
 } from "#/components/starwind/card";
-import { useStore } from "#/lib/store";
+import { Waiting } from "#/components/Waiting";
+import { api } from "#/lib/api";
+import type { Lesson } from "#/lib/types";
 
 export const Route = createFileRoute("/lessons")({ component: Lessons });
 
 function Lessons() {
-  const { lessons } = useStore();
+  const [lessons, setLessons] = useState<Lesson[] | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api
+      .lessons()
+      .then(setLessons)
+      .catch((e: Error) => setError(e.message));
+  }, []);
 
   return (
     <div className="grid gap-6">
@@ -21,13 +33,15 @@ function Lessons() {
           これまでに判断した問題と、そのとき残したメモです。次のアプリを作るときの見返し用です。
         </p>
       </div>
-      {lessons.length === 0 && (
+      <ErrorBox message={error} />
+      {!lessons && !error && <Waiting text="読み込み中" />}
+      {lessons?.length === 0 && (
         <p className="text-muted-foreground">
-          まだ記録がありません。問題を判断して「メモを残す」と、ここに並びます。
+          まだ記録がありません。出来事に対応して振り返りでメモを残すか、見送ると、ここに並びます。
         </p>
       )}
       <div className="grid gap-4 lg:grid-cols-2">
-        {lessons.map((l) => (
+        {lessons?.map((l) => (
           <Card key={l.id}>
             <CardHeader>
               <CardDescription className="text-sm">
@@ -36,7 +50,8 @@ function Lessons() {
                   to="/p/$pid/i/$iid"
                   params={{
                     pid: l.project_id,
-                    iid: l.issue_id,
+                    // id は「プロジェクトid-出来事id」
+                    iid: l.id.split("-").pop() ?? "",
                   }}
                   className="underline"
                 >

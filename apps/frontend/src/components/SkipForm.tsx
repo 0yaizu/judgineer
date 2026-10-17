@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "#/components/starwind/button";
 import { Label } from "#/components/starwind/label";
 import { Textarea } from "#/components/starwind/textarea";
-import { MIN_SKIP_REASON } from "#/lib/store";
+import { MIN_SKIP_REASON } from "#/lib/judge";
 
 export function SkipForm({
   openLabel,

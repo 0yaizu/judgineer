@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import type { Issue, Project } from "@tka/shared";
+import { SIM_DAYS } from "@tka/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArchDiagram } from "#/components/ArchDiagram";
 import { Crumbs, crumbLinkClass } from "#/components/Crumbs";
@@ -22,16 +22,20 @@ import {
   CardTitle,
 } from "#/components/starwind/card";
 import { Spinner } from "#/components/starwind/spinner";
+import { Waiting } from "#/components/Waiting";
+import { api } from "#/lib/api";
 import {
+  chosenLabel,
   type IssueState,
   isSettled,
   issueState,
-  relatedLessons,
-  SIM_DAYS,
-  setSimDay,
-  skipIssue,
-  useStore,
-} from "#/lib/store";
+  limitDay,
+} from "#/lib/judge";
+import type { Issue, ProjectView as Project } from "#/lib/types";
+import { useProject } from "#/lib/useProject";
+
+const setSimDay = (pid: string, day: number) =>
+  api.setSimDay(pid, day).catch(() => {});
 
 export const Route = createFileRoute("/p/$pid/")({
   validateSearch: (s: Record<string, unknown>): { play?: boolean } =>
@@ -104,32 +108,45 @@ function incidentLogs(i: Issue): LogLine[] {
 function SimulationRoute() {
   const { pid } = Route.useParams();
   const { play } = Route.useSearch();
-  const { projects } = useStore();
-  const p = projects.find((x) => x.id === pid);
+  const { project: p, setProject, error } = useProject(pid);
 
   if (!p) {
     return (
       <div className="grid gap-4">
-        <ErrorBox message="アプリが見つかりません。" />
-        <Link to="/" className="underline">
-          アプリを登録する
-        </Link>
+        {error ? (
+          <>
+            <ErrorBox message={error} />
+            <Link to="/" className="underline">
+              アプリを登録する
+            </Link>
+          </>
+        ) : (
+          <Waiting text="読み込み中" />
+        )}
       </div>
     );
   }
-  return <Simulation key={pid} p={p} autoplay={!!play} />;
+  return <Simulation key={pid} p={p} onChange={setProject} autoplay={!!play} />;
 }
 
-function Simulation({ p, autoplay }: { p: Project; autoplay: boolean }) {
+function Simulation({
+  p,
+  onChange,
+  autoplay,
+}: {
+  p: Project;
+  onChange: (p: Project) => void;
+  autoplay: boolean;
+}) {
   const navigate = useNavigate();
-  const { lessons } = useStore();
   const pid = p.id;
   const issues = useMemo(
     () => [...p.issues].sort((a, b) => a.day - b.day),
     [p.issues],
   );
   const openIssue = issues.find((i) => !isSettled(i));
-  const limit = openIssue ? openIssue.day : SIM_DAYS;
+  const limit = limitDay(issues, SIM_DAYS);
+  const [busy, setBusy] = useState(false);
 
   const [day, setDay] = useState(Math.min(p.sim_day, limit));
   const [playing, setPlaying] = useState(
@@ -243,9 +260,10 @@ function Simulation({ p, autoplay }: { p: Project; autoplay: boolean }) {
     onClick: () => seek(i.day),
   }));
 
-  const skip = (target: Issue, reason: string) => {
+  const skip = async (target: Issue, reason: string) => {
+    setBusy(true);
     try {
-      skipIssue(pid, target.id, reason);
+      onChange(await api.skip(pid, target.id, reason));
       setLogs((l) =>
         appendLog(l, {
           key: `sk${seq++}`,
@@ -260,6 +278,19 @@ function Simulation({ p, autoplay }: { p: Project; autoplay: boolean }) {
     } catch (e) {
       setError((e as Error).message);
     }
+    setBusy(false);
+  };
+
+  // 台本がまだ無い（台本づくりが途中で失敗した）ときに作り直す
+  const reanalyze = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      onChange(await api.analyze(pid));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+    setBusy(false);
   };
 
   const atIncident = current && !isSettled(current);
@@ -273,7 +304,8 @@ function Simulation({ p, autoplay }: { p: Project; autoplay: boolean }) {
     ? issues.find((i) => i.id === current.prevented_by)
     : undefined;
   const finished = today >= SIM_DAYS && !openIssue;
-  const related = relatedLessons(lessons, p);
+  const related = p.related_lessons.slice(0, 3);
+  const noScript = issues.length === 0 && !p.analyzed_by;
 
   return (
     <div className="grid gap-6">
@@ -326,7 +358,20 @@ function Simulation({ p, autoplay }: { p: Project; autoplay: boolean }) {
         </Card>
 
         <aside className="grid gap-4">
-          {atIncident ? (
+          {noScript ? (
+            <CalmCard title="運用の台本がまだありません">
+              <p>
+                台本づくりが途中で止まったようです。作り直すと再生できます（1〜2分）。
+              </p>
+              {busy ? (
+                <Waiting text="台本を作っています" pid={pid} />
+              ) : (
+                <Button variant="primary" onClick={reanalyze}>
+                  台本を作り直す
+                </Button>
+              )}
+            </CalmCard>
+          ) : atIncident ? (
             <Card className="ring-error">
               <CardHeader>
                 <Badge variant="error" size="sm" className="justify-self-start">
@@ -372,7 +417,7 @@ function Simulation({ p, autoplay }: { p: Project; autoplay: boolean }) {
               <p>
                 本来はこの日に起きるはずでした。
                 {currentBy
-                  ? `${currentBy.day}日目の修正「${currentBy.options[currentBy.decision?.option_index ?? 0]?.label}」`
+                  ? `${currentBy.day}日目の修正「${chosenLabel(currentBy)}」`
                   : "前の修正"}
                 で原因が取り除かれていたため、起きませんでした。
               </p>

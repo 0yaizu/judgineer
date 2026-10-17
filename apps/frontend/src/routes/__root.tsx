@@ -5,7 +5,10 @@ import {
   Link,
   Scripts,
 } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 
+import { api } from "#/lib/api";
+import type { AIConfig } from "#/lib/types";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -57,6 +60,14 @@ const NAV = [
 ] as const;
 
 function AppHeader() {
+  const [ai, setAi] = useState<AIConfig | null>(null);
+  useEffect(() => {
+    api
+      .config()
+      .then(setAi)
+      .catch(() => setAi(null));
+  }, []);
+
   return (
     <header className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4 sm:px-6">
@@ -79,7 +90,21 @@ function AppHeader() {
             </Link>
           ))}
         </nav>
+        {ai && (
+          <span
+            title={ai.status.detail}
+            className={`ml-auto rounded-full border px-3 py-0.5 text-xs ${ai.status.ok ? "text-muted-foreground" : "border-error text-error"}`}
+          >
+            AI: {ai.label}
+            {!ai.status.ok && "（要確認）"}
+          </span>
+        )}
       </div>
+      {ai && !ai.status.ok && (
+        <p className="bg-error/10 px-4 py-2 text-center text-sm text-error">
+          {ai.status.detail}
+        </p>
+      )}
     </header>
   );
 }
