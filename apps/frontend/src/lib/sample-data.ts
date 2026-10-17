@@ -1,5 +1,4 @@
-// 生成元: dopamian-Rhapsody の sample_apps/a_company_api と backend/app/ai/mock.py。
-// バックエンドなしで動かすため、サンプルアプリ1本分の台本をそのまま持っている。
+// バックエンドなしで動かすため、サンプルアプリ1本分の台本をそのまま持たせている。
 import type {
   Architecture,
   Background,
