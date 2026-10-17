@@ -1,0 +1,17 @@
+node_modules
+.DS_Store
+dist
+dist-ssr
+*.local
+.env
+.env.*
+!.env.example
+.turbo
+.nitro
+.tanstack
+.output
+*.tsbuildinfo
+# SQLite
+*.db
+*.db-shm
+*.db-wal
