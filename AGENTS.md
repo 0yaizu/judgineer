@@ -47,10 +47,12 @@ bun run format       # Biome の自動修正
 
 - TanStack Start は SPA モード（`spa: { enabled: true }`）。SSR は使わない。ビルド結果は `apps/frontend/dist/client/_shell.html`。
 - ルートは `apps/frontend/src/routes/` のファイルベース。`src/routeTree.gen.ts` は生成物だがコミットする（型チェックに必要）。`bun run typecheck` が `tsr generate` を先に実行する。
-- UI は Starwind UI。コンポーネントは `apps/frontend/src/components/starwind/` にコピーされる（CLI で追加）。
+- UI は Starwind UI。コンポーネントは `apps/frontend/src/components/starwind/` にコピーされる（CLI で追加）。このディレクトリは git 管理外で、`bun install` の postinstall（`apps/frontend/scripts/install-starwind.mjs`）が `starwind.config.json` に載っているものを CLI から取得する。CLI のバージョンは `apps/frontend/package.json` の `starwind` で固定している。
 - パスエイリアスは `#/*` と `@/*`（どちらも `src/*`）。
 
 ### Starwind コンポーネントを追加する
+
+追加すると `starwind.config.json` のコンポーネント一覧が更新される。この変更はコミットする（コンポーネント本体はコミットしない）。ほかの人は `bun install` で取得できる。
 
 Starwind の CLI は依存の追加に `npm install` を呼ぶため、`workspace:*` を使うこのリポジトリでは失敗する。`npm install` を `bun add` に置き換えるラッパーを PATH の先頭に置いて実行する。
 
