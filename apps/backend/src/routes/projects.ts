@@ -23,9 +23,12 @@ const BG_KEYS = Object.keys(backgroundSchema.shape) as (keyof Background)[];
 export default new Hono()
   .get("/", (c) => c.json(repo.listProjects()))
   .post("/", async (c) => {
-    const { background } = await readBody(
+    const { background, app_id } = await readBody(
       c,
-      z.object({ background: z.record(z.string(), z.unknown()) }),
+      z.object({
+        background: z.record(z.string(), z.unknown()),
+        app_id: z.string().optional(),
+      }),
     );
     const bg = Object.fromEntries(
       BG_KEYS.map((k) => {
@@ -34,6 +37,8 @@ export default new Hono()
       }),
     ) as Background;
     if (!bg.title) throw new HttpError(400, "アプリ名を入力してください");
+    if (app_id && !repo.getApp(app_id))
+      throw new HttpError(404, "アプリが見つかりません");
     if (
       !existsSync(config.targetDir) ||
       !statSync(config.targetDir).isDirectory()
@@ -62,6 +67,7 @@ export default new Hono()
       analyzed_by: null,
     };
     repo.saveProject(project);
+    repo.saveApp(bg, app_id);
     return c.json(project);
   })
   .get("/:pid", (c) => c.json(projectPayload(loadProject(c.req.param("pid")))))

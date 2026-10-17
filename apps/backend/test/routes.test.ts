@@ -77,3 +77,39 @@ test("file: パストラバーサルを拒否する", async () => {
     }
   }
 });
+
+test("apps: 新規登録で増え、app_id つきの登録は同じアプリの背景を更新する", async () => {
+  type AppList = { id: string; title: string }[];
+  const before = (await api<AppList>("GET", "/api/apps")).data;
+
+  await api("POST", "/api/projects", { background: { title: "新アプリ" } });
+  const created = (await api<AppList>("GET", "/api/apps")).data;
+  expect(created.length).toBe(before.length + 1);
+  const id = created.find((a) => a.title === "新アプリ")?.id ?? "";
+  expect(id).not.toBe("");
+
+  await api("POST", "/api/projects", {
+    background: { title: "新アプリ改", notes: "追記" },
+    app_id: id,
+  });
+  const after = (await api<AppList>("GET", "/api/apps")).data;
+  expect(after.length).toBe(created.length);
+  const saved = await api<{ background: { title: string; notes: string } }>(
+    "GET",
+    `/api/apps/${id}`,
+  );
+  expect(saved.data.background.title).toBe("新アプリ改");
+  expect(saved.data.background.notes).toBe("追記");
+});
+
+test("apps: 無い id は 404", async () => {
+  expect((await api("GET", "/api/apps/nope")).status).toBe(404);
+  expect(
+    (
+      await api("POST", "/api/projects", {
+        background: { title: "x" },
+        app_id: "nope",
+      })
+    ).status,
+  ).toBe(404);
+});
