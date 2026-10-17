@@ -1,4 +1,10 @@
-import { type Architecture, type Flow, NODE_KINDS } from "@tka/shared";
+import {
+  type Architecture,
+  type Flow,
+  type IssueOutline,
+  NODE_KINDS,
+} from "@tka/shared";
+import type { Finding } from "./scanner";
 import type { IfIgnored, IssueData } from "./types";
 
 // AI の出力を信用しすぎないための整形。共有スキーマは day などの範囲を見ないので、丸めはここで行う
@@ -142,6 +148,27 @@ export function ifIgnoredFor(
         text: "「これ、前に見送ったやつと同じ原因じゃない？」",
       },
     ],
+  };
+}
+
+/** AI が分類しきれなかった finding を、機械で issue の骨組みにする (落とすより雑でも残す) */
+export function fallbackOutline(f: Finding, day: number): IssueOutline {
+  return {
+    finding_ids: [f.id],
+    day,
+    incident_title: `「${f.title}」が運用中に問題として表に出た`,
+    view: "code",
+    affected_nodes: [],
+    title: f.title,
+    category: "脆弱性",
+    severity: "中",
+    // cleanIfIgnored が null にする形 (ifIgnoredFor のフォールバックが働く)
+    if_ignored: {
+      impact: "escalate",
+      reason: "",
+      after_days: 0,
+      incident_title: "",
+    },
   };
 }
 

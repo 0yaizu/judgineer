@@ -171,7 +171,11 @@ function reply(o: GenerateOpts<z.ZodType>): unknown {
             if_ignored: ifIgnored,
           },
         ],
-        dismissed: [],
+        // 残りは誤検知として外す (分類漏れの聞き直しを起こさない)
+        dismissed: findingIds.slice(2).map((id) => ({
+          finding_id: id,
+          reason: "ダミー値",
+        })),
       };
     }
     case "detail": {
@@ -250,15 +254,22 @@ function reply(o: GenerateOpts<z.ZodType>): unknown {
   }
 }
 
+// task ごとに返す内容を差し替える (各テストの冒頭で登録。beforeEach で空になる)
+export const overrides = new Map<
+  string,
+  (o: GenerateOpts<z.ZodType>) => unknown
+>();
+
 const fakeAI = async (o: GenerateOpts<z.ZodType>) => {
   calls.push({ task: o.task, system: o.system, prompt: o.prompt });
-  return o.schema.parse(reply(o));
+  return o.schema.parse((overrides.get(o.task) ?? reply)(o));
 };
 
 // 各テストファイルの先頭で呼ぶ (フックはそのファイルに登録される)
 export function installFakeAI() {
   beforeEach(() => {
     calls.length = 0;
+    overrides.clear();
     setAI(fakeAI as unknown as typeof generate);
   });
   afterEach(() => setAI(null));

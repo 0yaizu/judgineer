@@ -3,6 +3,8 @@ import {
   archResultSchema,
   flowsAllResultSchema,
   flowsResultSchema,
+  type IssueOutline,
+  type IssuesResult,
   issuesResultSchema,
   SIM_DAYS,
 } from "@tka/shared";
@@ -12,6 +14,7 @@ import {
   cleanArchitecture,
   cleanFlows,
   cleanIfIgnored,
+  fallbackOutline,
   uniqueDay,
 } from "./clean";
 import { prefetch } from "./detail";
@@ -165,25 +168,57 @@ async function run(pid: string) {
   p.uncovered_features = uncovered().map((f) => f.id);
   p.assumed_users = flowsRes.assumed_users;
 
-  setStage(pid, 5, "結果を保存しています");
   const byId = new Map(p.findings.map((f) => [f.id, f]));
-  // AIが誤検知として外した findings (同じ id は最初の1件だけ)
-  p.dismissed = [];
-  for (const d of result.dismissed) {
-    if (
-      byId.has(d.finding_id) &&
-      !p.dismissed.some((x) => x.finding_id === d.finding_id)
-    )
-      p.dismissed.push(d);
+  // 実在する finding を持つ issue だけ残す (根拠のない指摘は出さない)
+  const kept: { it: IssueOutline; fids: string[] }[] = [];
+  const issueIds = new Set<string>();
+  const dismissedList: Project["dismissed"] = [];
+  const dismissedIds = new Set<string>();
+  const absorb = (res: IssuesResult, allowed: Set<string>) => {
+    for (const it of res.issues) {
+      const fids = it.finding_ids.filter((f) => allowed.has(f));
+      if (fids.length === 0) continue;
+      kept.push({ it, fids });
+      for (const f of fids) issueIds.add(f);
+    }
+    // issue と dismissed が矛盾したら issue を優先する (本物を落とさない)
+    for (const d of res.dismissed) {
+      if (
+        allowed.has(d.finding_id) &&
+        !issueIds.has(d.finding_id) &&
+        !dismissedIds.has(d.finding_id)
+      ) {
+        dismissedList.push(d);
+        dismissedIds.add(d.finding_id);
+      }
+    }
+  };
+  absorb(result, new Set(byId.keys()));
+  const unclassified = () =>
+    p.findings.filter((f) => !issueIds.has(f.id) && !dismissedIds.has(f.id));
+  // 分類漏れは1回だけ聞き直す。失敗はそのまま上に伝える
+  const lost = unclassified();
+  if (lost.length > 0) {
+    setStage(pid, 4, "AIが分類漏れを確認しています");
+    absorb(
+      await generate({
+        task: "issues_missing",
+        system,
+        prompt: issuesPrompt({ findings: lost, arch }),
+        schema: issuesResultSchema,
+      }),
+      new Set(lost.map((f) => f.id)),
+    );
   }
-  const dismissedIds = new Set(p.dismissed.map((d) => d.finding_id));
-  const raw = result.issues
-    .map((it) => ({
-      it,
-      day: clampDay(it.day, SIM_DAYS),
-      fids: it.finding_ids.filter((f) => byId.has(f) && !dismissedIds.has(f)),
-    }))
-    .filter((r) => r.fids.length > 0) // 根拠のない指摘は出さない
+  // それでも漏れたものは機械で issue にする
+  unclassified().forEach((f, i) => {
+    kept.push({ it: fallbackOutline(f, i + 1), fids: [f.id] });
+  });
+
+  setStage(pid, 5, "結果を保存しています");
+  p.dismissed = dismissedList;
+  const raw = kept
+    .map(({ it, fids }) => ({ it, day: clampDay(it.day, SIM_DAYS), fids }))
     .sort((a, b) => a.day - b.day);
   const used = new Set<number>();
   reset(p); // AI が全部成功してから捨てる (失敗したら前の状態を残す)
