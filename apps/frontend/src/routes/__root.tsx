@@ -55,8 +55,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 }
 
 const NAV = [
-  { to: "/", label: "アプリを登録" },
+  { to: "/sessions", label: "セッション履歴" },
   { to: "/lessons", label: "判断の記録" },
+  { to: "/register", label: "アプリを登録" },
 ] as const;
 
 function AppHeader() {
