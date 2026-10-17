@@ -92,20 +92,37 @@ const incidentFields = {
   background_link: z.string(),
 };
 
-// LLM が返す問題。保存用の Issue は backend の types.ts
-export const generatedIssueSchema = z.object({
+export const incidentSchema = z.object(incidentFields);
+export type Incident = z.infer<typeof incidentSchema>;
+
+// LLM が最初に返す問題の骨組み (本文なし)。保存用の Issue は backend の types.ts
+export const issueOutlineSchema = z.object({
   finding_ids: z.array(z.string()),
-  ...incidentFields,
+  day: incidentFields.day,
+  incident_title: z.string(),
+  view: viewSchema,
+  affected_nodes: z.array(z.string()),
+  title: z.string(),
+  category: incidentFields.category,
+  severity: severitySchema,
   if_ignored: z.object({
     impact: z.enum(["none", "escalate"]),
     reason: z.string(),
     after_days: z.number().int().describe("0〜90"),
-    incident_title: z.string(),
-    incident_story: z.string(),
-    signals: z.array(signalSchema),
+    incident_title: z.string().describe("escalate のときだけ。none は空文字"),
   }),
 });
-export type GeneratedIssue = z.infer<typeof generatedIssueSchema>;
+export type IssueOutline = z.infer<typeof issueOutlineSchema>;
+
+// 必要になったときに1件ずつ作る本文
+export const issueDetailSchema = z.object({
+  incident_story: z.string().min(1), // 空文字は「未生成」の印なので、空では返させない
+  signals: z.array(signalSchema),
+  what_happens: z.string(),
+  who_is_affected: z.string(),
+  background_link: z.string(),
+});
+export type IssueDetail = z.infer<typeof issueDetailSchema>;
 
 export const dismissedSchema = z.object({
   finding_id: z.string(),
@@ -125,7 +142,7 @@ export const flowsResultSchema = z.object({ flows: z.array(flowSchema) });
 export type FlowsResult = z.infer<typeof flowsResultSchema>;
 
 export const issuesResultSchema = z.object({
-  issues: z.array(generatedIssueSchema),
+  issues: z.array(issueOutlineSchema),
   dismissed: z.array(dismissedSchema),
 });
 export type IssuesResult = z.infer<typeof issuesResultSchema>;

@@ -14,13 +14,8 @@ import {
   cleanIfIgnored,
   uniqueDay,
 } from "./clean";
-import {
-  currentDir,
-  incidentFields,
-  loadProject,
-  projectPayload,
-  srcDir,
-} from "./project";
+import { prefetch } from "./detail";
+import { currentDir, loadProject, projectPayload, srcDir } from "./project";
 import {
   analyzeSystem,
   archPrompt,
@@ -205,7 +200,18 @@ async function run(pid: string) {
       id: `I${n + 1}`,
       day: d,
       chat: [],
-      ...incidentFields(it, nodeIds),
+      title: it.title,
+      category: it.category,
+      severity: it.severity,
+      view: it.view,
+      incident_title: it.incident_title,
+      affected_nodes: it.affected_nodes.filter((a) => nodeIds.has(a)),
+      // 本文は必要になったときに detail.ts で作る (空文字が未生成の印)
+      incident_story: "",
+      signals: [],
+      what_happens: "",
+      who_is_affected: "",
+      background_link: "",
       finding_ids: fids,
       _rule: byId.get(fids[0] as string)?.rule,
       ...(ii ? { if_ignored: ii } : {}),
@@ -219,5 +225,6 @@ async function run(pid: string) {
   p.architecture = arch;
   p.sim_day = 0;
   repo.saveProject(p);
+  void prefetch(pid); // 一番早い出来事の本文を先に作っておく
   return projectPayload(p);
 }

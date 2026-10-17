@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
-import { type GeneratedIssue as Incident, SIM_DAYS } from "@tka/shared";
+import { type Incident, SIM_DAYS } from "@tka/shared";
 import { config } from "./config";
 import { HttpError } from "./http";
 import * as repo from "./repo";
@@ -41,7 +41,7 @@ export function nextIssueId(p: Project): string {
 
 /** AI が作った出来事から、保存する項目を取り出す (affected_nodes は構成図にあるものだけ) */
 export function incidentFields(
-  it: Omit<Incident, "finding_ids" | "if_ignored" | "day">,
+  it: Omit<Incident, "day">,
   nodeIds: Set<string>,
 ) {
   return {

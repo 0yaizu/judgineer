@@ -1,5 +1,6 @@
 import { type Architecture, type Background, SIM_DAYS } from "@tka/shared";
 import type { Feature, Finding } from "../scanner";
+import type { Issue } from "../types";
 import { backgroundText, RULES, SOURCES_NOTE, tag } from "./common";
 
 // 4 回の呼び出し (arch → flows_all ‖ issues → flows補完) で system を完全に同じ文字列にし、キャッシュを効かせる。
@@ -85,18 +86,80 @@ issues（運用中に起きる出来事）:
 - 1つの原因につき1件。同じ原因の findings はまとめてよい。finding_ids には根拠にした findings の id を入れる。findings にない問題は足さない。dismissed に入れたものは使わない。
 - day は現実に起きそうな順番とタイミングにして、ばらけさせる。day の早い順に並べる。
 - incident_title: その日に「観測されること」を一文で（例:「B社サポート窓口から『検索結果がおかしい』と連絡が来た」）。原因の名前（SQLインジェクション等）はここでは書かない。
-- incident_story: 2〜3文。気づいた人、時刻、状況を具体的に。
-- signals: 3〜6件。アクセスログ・エラーログ・監視アラート・取引先からの連絡など。time は "06:12:03" 形式、source は "api.log" "監視" "B社から" など。ログはそれらしい1行にする。
 - view: 原因がコードの書き方なら code、構成・権限・運用体制なら infra。
 - affected_nodes: 構成図の node の id だけを使う。
-- title: 原因を一文で（20字前後）。what_happens: 原因と、放っておくと運用で何が起きるか（2〜3文）。
-- who_is_affected: 背景に出てくる名前を使う。background_link: この問題に関係する背景の情報。なければ空文字。
+- title: 原因を一文で（20字前後）。
 - severity: 背景をふまえた影響の大きさ。
+- 出来事の本文（経緯・ログ・影響など）は、あとで1件ずつ作る。ここでは書かない。
 - if_ignored: 本人がこの出来事を「今回は対応しない」と見送った場合。
   - impact: 被害が広がる・より大きな形で表に出るなら escalate。テスト用ファイル・使われていないコード・影響が社内で小さく閉じるものなど、運用への影響が小さいなら none。reason は理由を一文で。
-  - escalate: after_days は 7〜90。incident_title・incident_story・signals は最初より深刻になった場面（書き方は上と同じ。原因の名前は書かない）。
-  - none: after_days は 0、incident_title・incident_story は空文字、signals は空の配列。`,
+  - escalate: after_days は 7〜90。incident_title は最初より深刻になった場面で「観測されること」を一文で（書き方は上と同じ。原因の名前は書かない）。
+  - none: after_days は 0、incident_title は空文字。`,
     ),
+    tag("findings", JSON.stringify(a.findings, null, 1)),
+    tag("architecture", JSON.stringify(a.arch)),
+  ].join("\n\n");
+}
+
+/** 骨組みの issue 1件ぶんの本文を作る。parent があれば、見送った結果として悪化した場面 */
+export function detailPrompt(a: {
+  issue: Pick<
+    Issue,
+    | "day"
+    | "incident_title"
+    | "title"
+    | "category"
+    | "severity"
+    | "view"
+    | "affected_nodes"
+  >;
+  findings: Finding[];
+  arch: Architecture;
+  parent?: { incident_story: string; reason: string };
+}): string {
+  const {
+    day,
+    incident_title,
+    title,
+    category,
+    severity,
+    view,
+    affected_nodes,
+  } = a.issue;
+  return [
+    part(
+      "この出来事1件の本文（incident_story, signals, what_happens, who_is_affected, background_link）",
+      `- incident_story: 2〜3文。気づいた人、時刻、状況を具体的に。incident_title の内容に合わせる。
+- signals: 3〜6件。アクセスログ・エラーログ・監視アラート・取引先からの連絡など。time は "06:12:03" 形式、source は "api.log" "監視" "B社から" など。ログはそれらしい1行にする。
+- 原因の名前（SQLインジェクション等）は incident_story と signals には書かない。
+- what_happens: 原因と、放っておくと運用で何が起きるか（2〜3文）。
+- who_is_affected: 背景に出てくる名前を使う。
+- background_link: この問題に関係する背景の情報。なければ空文字。${
+        a.parent
+          ? "\n- これは、一度見送った出来事が悪化した場面。最初の出来事より深刻になった場面として書く。"
+          : ""
+      }`,
+    ),
+    tag(
+      "issue",
+      JSON.stringify({
+        day,
+        incident_title,
+        title,
+        category,
+        severity,
+        view,
+        affected_nodes,
+      }),
+    ),
+    ...(a.parent
+      ? [
+          tag(
+            "first_incident",
+            `最初の出来事: ${a.parent.incident_story}\n見送ると悪化する理由: ${a.parent.reason}`,
+          ),
+        ]
+      : []),
     tag("findings", JSON.stringify(a.findings, null, 1)),
     tag("architecture", JSON.stringify(a.arch)),
   ].join("\n\n");

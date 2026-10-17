@@ -11,7 +11,7 @@ export type Payload = Project & { sim_days: number; related_lessons: Lesson[] };
 
 // --- 偽 AI: task で分岐し、返した値は schema で検証する (ずれたらテストが落ちる) ---
 // 他モジュールから代入できないので、再代入せず length = 0 で空にする
-export const calls: { task: string; system: string }[] = [];
+export const calls: { task: string; system: string; prompt: string }[] = [];
 export const findingIds: string[] = [];
 export const appPy = readFileSync(join(config.targetDir, "app.py"), "utf8");
 const debugLine =
@@ -136,28 +136,55 @@ function reply(o: GenerateOpts<z.ZodType>): unknown {
         reason: "広がる",
         after_days: 14,
         incident_title: "見送った件が悪化した",
-        incident_story: "被害が増えた",
-        signals: [signal("監視")],
+      };
+      const outline = (day: number, title: string) => {
+        const {
+          incident_story: _s,
+          signals: _g,
+          what_happens: _w,
+          who_is_affected: _a,
+          background_link: _b,
+          ...rest
+        } = incident(day, title);
+        return rest;
       };
       return {
         issues: [
           {
-            ...incident(40, "二つ目"),
+            ...outline(40, "二つ目"),
             finding_ids: [findingIds[1]],
-            if_ignored: { ...ifIgnored, impact: "none", after_days: 0 },
+            if_ignored: {
+              ...ifIgnored,
+              impact: "none",
+              after_days: 0,
+              incident_title: "",
+            },
           },
           {
-            ...incident(10, "一つ目"),
+            ...outline(10, "一つ目"),
             finding_ids: [findingIds[0]],
             if_ignored: ifIgnored,
           },
           {
-            ...incident(5, "根拠なし"),
+            ...outline(5, "根拠なし"),
             finding_ids: ["F999"],
             if_ignored: ifIgnored,
           },
         ],
         dismissed: [],
+      };
+    }
+    case "detail": {
+      const { incident_story, signals, what_happens, who_is_affected } =
+        incident(0, "");
+      return {
+        incident_story: o.prompt.includes("<first_incident>")
+          ? "さらに被害が増えた。"
+          : incident_story,
+        signals,
+        what_happens: `${what_happens}(生成)`,
+        who_is_affected,
+        background_link: "",
       };
     }
     case "chat":
@@ -224,7 +251,7 @@ function reply(o: GenerateOpts<z.ZodType>): unknown {
 }
 
 const fakeAI = async (o: GenerateOpts<z.ZodType>) => {
-  calls.push({ task: o.task, system: o.system });
+  calls.push({ task: o.task, system: o.system, prompt: o.prompt });
   return o.schema.parse(reply(o));
 };
 

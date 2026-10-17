@@ -45,7 +45,7 @@ export const incidentText = (
 ) => `運用${i.day}日目\n${i.incident_title}\n${i.incident_story}`;
 
 export const causeText = (i: Pick<IssueView, "title" | "what_happens">) =>
-  `${i.title}\n${i.what_happens}`;
+  i.what_happens ? `${i.title}\n${i.what_happens}` : i.title;
 
 // 内部の id (F1 など) は AI に見せない。見せると本人への発言に混ざる
 export const evidenceText = (evidence: Evidence[]) =>
