@@ -23,8 +23,9 @@
 * 
 
 #### フレームワーク・ライブラリ・モジュール
-* 
-* 
+* フロントエンド: TanStack Start（SPA モード）/ React 19 / Tailwind CSS v4 / Starwind UI
+* バックエンド: Hono / Drizzle ORM（SQLite）
+* 共通: zod（フロント・バックで共有するスキーマ）/ Bun / Turborepo / Biome
 
 #### デバイス
 * 
@@ -34,3 +35,31 @@
 #### ハッカソンで開発した独自機能・技術
 * 独自で開発したものの内容をこちらに記載してください
 * 特に力を入れた部分をファイルリンク、またはcommit_idを記載してください。
+
+## 開発者向けセットアップ
+### 構成
+```
+apps/frontend    TanStack Start (SPA) + React + Starwind UI   http://localhost:3000
+apps/backend     Hono + Drizzle (bun:sqlite)                  http://127.0.0.1:3001
+packages/shared  zod スキーマ（フロント・バック共有）
+```
+
+### 必要なもの
+* [Bun](https://bun.com/) 1.4 以上（Node.js / pnpm は不要）
+
+### コマンド
+```sh
+bun install          # 依存関係のインストール
+bun run dev          # frontend と backend を同時に起動
+bun run build        # ビルド
+bun run typecheck    # 型チェック
+bun run test         # テスト
+bun run check        # lint と format の検査（Biome）
+bun run format       # lint と format の自動修正（Biome）
+```
+
+* 開発時、フロントの `/api` はバックエンドへプロキシされる。
+* バックエンドの環境変数は `apps/backend/.env.example` を参照（`PORT`、`DATABASE_URL`）。
+* VS Code では拡張機能「Biome」（`biomejs.biome`）を入れると、保存時に lint と format が自動で走る。
+
+詳しい開発ルールは [AGENTS.md](./AGENTS.md) を参照。
