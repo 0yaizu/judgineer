@@ -1,3 +1,9 @@
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconPlayerPauseFilled,
+  IconPlayerPlayFilled,
+} from "@tabler/icons-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { SIM_DAYS } from "@tka/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -158,6 +164,7 @@ function Simulation({
   );
   const [liveEdges, setLiveEdges] = useState<number[]>([]);
   const [error, setError] = useState("");
+  const [seekbarOpen, setSeekbarOpen] = useState(true);
   const dayRef = useRef(Math.min(p.sim_day, limit));
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -573,23 +580,84 @@ function Simulation({
         </aside>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95">
-        <Seekbar
-          day={day}
-          total={SIM_DAYS}
-          limit={limit}
-          markers={markers}
-          playing={playing}
-          speed={speed}
-          onToggle={toggle}
-          onSpeed={(s) => setSpeed(s === 3 ? 3 : 1)}
-          onSeek={seek}
-          blockedMessage={
-            openIssue
-              ? `${openIssue.day}日目の出来事に対応するか見送るまで、先へは進めません`
-              : undefined
-          }
-        />
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/90">
+        {/* 開閉は 0.5 秒かけて、高さと透明度を変える（見えていない側は操作できないようにする） */}
+        <div
+          inert={!seekbarOpen}
+          className={`grid transition-[grid-template-rows,opacity] duration-500 ease-in-out ${seekbarOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+        >
+          <div className="overflow-hidden">
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="absolute top-0 right-1 z-10 size-6"
+                aria-label="シークバーを最小化する"
+                aria-expanded
+                onClick={() => setSeekbarOpen(false)}
+              >
+                <IconChevronDown />
+              </Button>
+              <Seekbar
+                day={day}
+                total={SIM_DAYS}
+                limit={limit}
+                markers={markers}
+                playing={playing}
+                speed={speed}
+                onToggle={toggle}
+                onSpeed={(s) => setSpeed(s === 3 ? 3 : 1)}
+                onSeek={seek}
+                blockedMessage={
+                  openIssue
+                    ? `${openIssue.day}日目の出来事に対応するか見送るまで、先へは進めません`
+                    : undefined
+                }
+              />
+            </div>
+          </div>
+        </div>
+        <div
+          inert={seekbarOpen}
+          className={`grid transition-[grid-template-rows,opacity] duration-500 ease-in-out ${seekbarOpen ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"}`}
+        >
+          <div className="overflow-hidden">
+            <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-1.5 sm:px-6">
+              <Button
+                variant="primary"
+                size="icon-sm"
+                className="size-8 rounded-full"
+                onClick={toggle}
+                aria-label={playing ? "一時停止" : "再生"}
+                disabled={day >= SIM_DAYS}
+              >
+                {playing ? <IconPlayerPauseFilled /> : <IconPlayerPlayFilled />}
+              </Button>
+              <span className="text-sm tabular-nums">
+                <b>{Math.floor(day)}</b>
+                <span className="text-muted-foreground">
+                  {" "}
+                  日目 / {SIM_DAYS}日
+                </span>
+              </span>
+              {openIssue && (
+                <span className="text-xs text-error">
+                  {openIssue.day}日目の出来事が未対応です
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="ml-auto size-7"
+                aria-label="シークバーを開く"
+                aria-expanded={false}
+                onClick={() => setSeekbarOpen(true)}
+              >
+                <IconChevronUp />
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
       {atIncident && (
         <div className="sr-only" role="alert">

@@ -98,7 +98,8 @@ export function Seekbar({
       </div>
 
       <div className="relative order-last min-w-0 flex-1 basis-full pt-7 pb-5 sm:order-none sm:basis-0">
-        <div className="relative">
+        {/* つまみは、進めない区間の灰色の帯より手前に出す */}
+        <div className="relative [&_[data-slot=slider-thumb]]:z-10">
           <Slider
             variant="primary"
             aria-label="運用の経過日数"
