@@ -1,4 +1,9 @@
-import { IconPlayerPlayFilled, IconSend } from "@tabler/icons-react";
+import {
+  IconArrowDown,
+  IconBulb,
+  IconPlayerPlayFilled,
+  IconSend,
+} from "@tabler/icons-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   type KeyboardEvent,
@@ -153,6 +158,17 @@ function stepOf(i: Issue, busy: Busy): number {
   }
 }
 
+// 各ステップの会話が始まる位置（chat の添字）。まだ無い、または記録が無いときは null
+function stepStarts(i: Issue): (number | null)[] {
+  const fix = i.chat.findIndex((m) => m.kind === "fix");
+  return [
+    i.chat.length > 0 ? 0 : null,
+    i.decide_at ?? null,
+    fix >= 0 ? fix : null,
+    fix >= 0 ? Math.min(fix + 1, i.chat.length - 1) : null,
+  ];
+}
+
 function IssuePage({
   p,
   issue: initial,
@@ -174,6 +190,10 @@ function IssuePage({
     initial.view === "infra" ? "infra" : "code",
   );
   const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [awayFromEnd, setAwayFromEnd] = useState(false);
+  // 会話を遡って見ているステップ。最新を見ているとき（今のステップ）は null
+  const [viewing, setViewing] = useState<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // 毎回新しい配列にならないようにする（コードのスクロール位置が入力のたびに戻るため）
@@ -200,7 +220,56 @@ function IssuePage({
   const handled = !!issue.fix || !!issue.feedback;
   const ready = issue.phase === "ready" && !!issue.plan_draft && !issue.fix;
   const step = stepOf(issue, busy);
+  const starts = stepStarts(issue);
+  const shown = Math.min(viewing ?? step, step); // ハイライトするステップ
+
+  // 押したステップの会話の頭まで、会話欄の中だけをスクロールする（今のステップなら最新まで）
+  const jumpTo = (n: number) => {
+    const list = listRef.current;
+    if (!list) return;
+    const at = starts[n];
+    const el = n >= step || at == null ? null : list.children[at];
+    if (!(el instanceof HTMLElement)) {
+      list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+      return;
+    }
+    const top =
+      list.scrollTop +
+      el.getBoundingClientRect().top -
+      list.getBoundingClientRect().top -
+      16;
+    list.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  };
   const showChat = !preventer && !issue.skipped;
+
+  // 最新の発言から離れているとき「最新へ」を出し、画面の一番上にある発言がどのステップかも調べる
+  const checkEnd = () => {
+    const list = listRef.current;
+    if (!list) return;
+    const away = list.scrollHeight - list.scrollTop - list.clientHeight > 80;
+    setAwayFromEnd(away);
+    if (!away) return setViewing(null);
+    const top = list.getBoundingClientRect().top + 24;
+    let at = 0;
+    for (let k = 0; k < issue.chat.length; k++) {
+      const child = list.children[k];
+      if (child && child.getBoundingClientRect().bottom > top) {
+        at = k;
+        break;
+      }
+    }
+    let n = 0;
+    for (let k = 0; k <= Math.min(step, STEPS.length - 1); k++) {
+      const from = starts[k];
+      if (from != null && from <= at) n = k;
+    }
+    setViewing(n);
+  };
+  const jumpToEnd = () =>
+    listRef.current?.scrollTo({
+      top: listRef.current.scrollHeight,
+      behavior: "smooth",
+    });
 
   // 会話をまだ始めていなければ、最初の一言（AI を使わない）を出す
   useEffect(() => {
@@ -511,54 +580,92 @@ function IssuePage({
             className="flex flex-col overflow-hidden rounded-xl border bg-background lg:sticky lg:top-20 lg:h-[calc(100vh-6.5rem)] lg:min-h-[32rem]"
           >
             <ol
-              className="flex gap-1.5 border-b p-3 text-xs"
+              className="relative flex gap-1.5 border-b p-3 text-xs"
               aria-label="進み具合"
             >
-              {STEPS.map((s, n) => (
-                <li
-                  key={s}
-                  className={`flex-1 rounded-full py-1 text-center ${
-                    n === step
-                      ? "bg-primary font-medium text-primary-foreground"
-                      : n < step
-                        ? "bg-primary/10 text-primary"
-                        : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {s}
-                </li>
-              ))}
+              {/* 今見ているステップの色（緑の丸）。ステップが変わると横になめらかに動く */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute top-3 bottom-3 left-3 rounded-full bg-primary transition-[transform,opacity] duration-500 ease-in-out"
+                style={{
+                  width: "calc((100% - 1.5rem - 1.125rem) / 4)",
+                  transform: `translateX(calc(${shown} * (100% + 0.375rem)))`,
+                  opacity: shown < STEPS.length ? 1 : 0,
+                }}
+              />
+              {STEPS.map((s, n) => {
+                const canJump = n <= step && (n === step || starts[n] != null);
+                return (
+                  <li key={s} className="relative z-10 flex-1">
+                    <button
+                      type="button"
+                      disabled={!canJump}
+                      onClick={() => jumpTo(n)}
+                      aria-current={n === step ? "step" : undefined}
+                      title={
+                        canJump && n < step
+                          ? `「${s}」の会話まで戻る`
+                          : undefined
+                      }
+                      className={`w-full rounded-full py-1 text-center transition-colors duration-500 ease-in-out disabled:cursor-default ${
+                        n === shown
+                          ? "font-medium text-primary-foreground"
+                          : n <= step
+                            ? "bg-primary/10 text-primary hover:bg-primary/20 disabled:hover:bg-primary/10"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  </li>
+                );
+              })}
             </ol>
 
-            <div
-              className="flex min-h-64 flex-1 flex-col gap-3 overflow-y-auto bg-muted/30 p-4"
-              aria-live="polite"
-            >
-              {issue.chat.map((m, n) => (
-                <Bubble
-                  // biome-ignore lint/suspicious/noArrayIndexKey: 発言は後ろに足すだけで並び替えない
-                  key={n}
-                  m={m}
-                  onShowFix={() => setTab("fix")}
-                />
-              ))}
-              {(busy === "chat" || busy === "hint" || busy === "start") && (
-                <Typing />
+            <div className="relative flex min-h-64 flex-1 flex-col overflow-hidden">
+              <div
+                ref={listRef}
+                onScroll={checkEnd}
+                className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-muted/30 p-4"
+                aria-live="polite"
+              >
+                {issue.chat.map((m, n) => (
+                  <Bubble
+                    // biome-ignore lint/suspicious/noArrayIndexKey: 発言は後ろに足すだけで並び替えない
+                    key={n}
+                    m={m}
+                    onShowFix={() => setTab("fix")}
+                  />
+                ))}
+                {(busy === "chat" || busy === "hint" || busy === "start") && (
+                  <Typing />
+                )}
+                {busy === "commit" && (
+                  <div className="rounded-lg border bg-background p-3">
+                    <Waiting text="決めた方針をコードと構成に反映して、この先の運用への影響を計算しています（20〜40秒）" />
+                  </div>
+                )}
+                {issue.lesson && issue.phase === "done" && (
+                  <div className="rounded-lg border border-dashed border-primary bg-background p-3">
+                    <span className="text-xs font-bold text-muted-foreground">
+                      判断の記録に残したメモ
+                    </span>
+                    <p className="text-sm">{issue.lesson}</p>
+                  </div>
+                )}
+                <div ref={endRef} />
+              </div>
+              {awayFromEnd && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full shadow-md"
+                  onClick={jumpToEnd}
+                >
+                  <IconArrowDown />
+                  最新へ
+                </Button>
               )}
-              {busy === "commit" && (
-                <div className="rounded-lg border bg-background p-3">
-                  <Waiting text="決めた方針をコードと構成に反映して、この先の運用への影響を計算しています（20〜40秒）" />
-                </div>
-              )}
-              {issue.lesson && issue.phase === "done" && (
-                <div className="rounded-lg border border-dashed border-primary bg-background p-3">
-                  <span className="text-xs font-bold text-muted-foreground">
-                    判断の記録に残したメモ
-                  </span>
-                  <p className="text-sm">{issue.lesson}</p>
-                </div>
-              )}
-              <div ref={endRef} />
             </div>
 
             <div className="grid gap-2 border-t p-3">
@@ -641,11 +748,13 @@ function IssuePage({
                   <div className="flex flex-wrap items-start gap-2">
                     {issue.phase !== "done" && (
                       <Button
-                        variant="ghost"
+                        variant="success"
                         size="sm"
+                        className="border border-primary/40"
                         disabled={!!busy}
                         onClick={() => send(true)}
                       >
+                        <IconBulb />
                         ヒントをもらう
                       </Button>
                     )}
