@@ -2,6 +2,7 @@ import type { Health } from "@tka/shared";
 import { Hono } from "hono";
 import { AIError } from "./ai/client";
 import { HttpError } from "./http";
+import issues from "./routes/issues";
 import meta from "./routes/meta";
 import projects from "./routes/projects";
 
@@ -19,7 +20,8 @@ const app = new Hono()
     return c.json(body);
   })
   .route("/", meta)
-  .route("/projects", projects);
+  .route("/projects", projects)
+  .route("/projects", issues);
 
 export type AppType = typeof app;
 export default app;
