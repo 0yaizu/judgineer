@@ -2,10 +2,11 @@ import { cpSync, existsSync, readFileSync, statSync } from "node:fs";
 import { type Background, backgroundSchema, SIM_DAYS } from "@tka/shared";
 import { Hono } from "hono";
 import { z } from "zod";
-import { analyze, getProgress } from "../analyze";
+import { analyze } from "../analyze";
 import { settled } from "../clean";
 import { config, REPO_ROOT } from "../config";
 import { HttpError, readBody } from "../http";
+import { getProgress } from "../progress";
 import {
   currentDir,
   inside,

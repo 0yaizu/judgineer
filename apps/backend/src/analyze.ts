@@ -15,6 +15,15 @@ import {
   uniqueDay,
 } from "./clean";
 import { prefetch } from "./detail";
+import { parsePartialJson } from "./partial-json";
+import { partialArchitecture, partialIssues } from "./partial-view";
+import {
+  endProgress,
+  putPartial,
+  setChars,
+  setPartial,
+  setStage as setProgressStage,
+} from "./progress";
 import { currentDir, loadProject, projectPayload, srcDir } from "./project";
 import {
   analyzeSystem,
@@ -29,40 +38,15 @@ import type { Issue, Project } from "./types";
 
 const STEPS = 5;
 
-type Progress = {
-  stage: string;
-  step: number;
-  total: number;
-  started: number;
-  chars: number;
-};
-
-// shortcut: メモリ上だけ (プロセスが1つの前提), 複数プロセスにするなら DB へ
-const progress = new Map<string, Progress>();
-
-function setStage(pid: string, step: number, stage: string): void {
-  progress.set(pid, {
-    stage,
-    step,
-    total: STEPS,
-    started: progress.get(pid)?.started ?? Date.now(),
-    chars: progress.get(pid)?.chars ?? 0,
-  });
-}
-
-export function getProgress(pid: string) {
-  const cur = progress.get(pid);
-  if (!cur) return { stage: null };
-  const { started, ...rest } = cur;
-  return { ...rest, elapsed: Math.floor((Date.now() - started) / 1000) };
-}
+const setStage = (pid: string, step: number, stage: string) =>
+  setProgressStage(pid, step, STEPS, stage);
 
 export async function analyze(pid: string) {
   setStage(pid, 1, "コードの指摘を整理しています");
   try {
     return await run(pid);
   } finally {
-    progress.delete(pid);
+    endProgress(pid);
   }
 }
 
@@ -107,20 +91,26 @@ async function run(pid: string) {
     system,
     prompt: archPrompt(),
     schema: archResultSchema,
+    onPartial: (json) =>
+      setPartial(pid, () => {
+        const architecture = partialArchitecture(parsePartialJson(json));
+        return architecture && { architecture };
+      }),
   });
   const arch = cleanArchitecture(archRes.architecture);
 
   setStage(pid, 4, "AIが利用シナリオと台本を書いています");
+  putPartial(pid, { architecture: arch });
   const ac = new AbortController();
   const counts = [0, 0];
   const onProgress = (i: number) => (n: number) => {
     counts[i] = n;
     const total = counts[0] + counts[1];
-    const cur = progress.get(pid);
-    if (cur) {
-      cur.chars = total;
-      cur.stage = `AIが台本を書いています（${total.toLocaleString("en-US")}文字）`;
-    }
+    setChars(
+      pid,
+      total,
+      `AIが台本を書いています（${total.toLocaleString("en-US")}文字）`,
+    );
   };
   const [flowsRes, result] = await Promise.all([
     generate({
@@ -137,6 +127,11 @@ async function run(pid: string) {
       prompt: issuesPrompt({ findings: p.findings, arch }),
       schema: issuesResultSchema,
       onProgress: onProgress(1),
+      onPartial: (json) =>
+        setPartial(pid, () => ({
+          architecture: arch,
+          issues: partialIssues(parsePartialJson(json)),
+        })),
       signal: ac.signal,
     }),
   ]).catch((e) => {

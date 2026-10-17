@@ -7,6 +7,7 @@ import { ifIgnoredFor, uniqueDay } from "../clean";
 import { ensureDetail, openDetail } from "../detail";
 import { applyFix } from "../fix";
 import { HttpError, readBody } from "../http";
+import { getProgress } from "../progress";
 import {
   currentDir,
   findIssue,
@@ -30,6 +31,12 @@ export default new Hono()
     findIssue(loadProject(pid), iid);
     await openDetail(pid, iid);
     return c.json(findIssue(loadProject(pid), iid));
+  })
+  .get("/:pid/issues/:iid/progress", (c) => {
+    const pid = c.req.param("pid");
+    const iid = c.req.param("iid");
+    findIssue(loadProject(pid), iid);
+    return c.json(getProgress(`${pid}:${iid}`));
   })
   .post("/:pid/issues/:iid/chat/start", async (c) => {
     await ensureDetail(c.req.param("pid"), c.req.param("iid"));

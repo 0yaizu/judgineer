@@ -1,6 +1,9 @@
 import { issueDetailSchema } from "@tka/shared";
 import { generate } from "./ai/client";
 import { settled } from "./clean";
+import { parsePartialJson } from "./partial-json";
+import { partialDetail } from "./partial-view";
+import { endProgress, setChars, setPartial, setStage } from "./progress";
 import { loadProject, srcDir } from "./project";
 import { analyzeSystem, detailPrompt } from "./prompts/analyze";
 import * as repo from "./repo";
@@ -20,12 +23,16 @@ export function ensureDetail(pid: string, iid: string): Promise<void> {
   const running = inflight.get(key);
   // 終わったあとにもう一度確かめる (捨てられた古い結果に相乗りしたままにしない)
   if (running) return running.then(() => ensureDetail(pid, iid));
-  const job = generateDetail(pid, iid).finally(() => inflight.delete(key));
+  const job = generateDetail(pid, iid, key).finally(() => inflight.delete(key));
   inflight.set(key, job);
   return job;
 }
 
-async function generateDetail(pid: string, iid: string): Promise<void> {
+async function generateDetail(
+  pid: string,
+  iid: string,
+  key: string,
+): Promise<void> {
   const p = loadProject(pid);
   const issue = p.issues.find((i) => i.id === iid);
   if (!issue || hasDetail(issue)) return;
@@ -33,8 +40,12 @@ async function generateDetail(pid: string, iid: string): Promise<void> {
     ? p.issues.find((i) => i.id === issue.escalated_from)
     : undefined;
   const src = srcDir(pid);
+  setStage(key, 1, 1, "出来事の詳細を書いています");
   const result = await generate({
     task: "detail",
+    onProgress: (n) => setChars(key, n),
+    onPartial: (json) =>
+      setPartial(key, () => partialDetail(parsePartialJson(json))),
     // analyze.ts と完全に同じ引数にして、キャッシュを効かせる
     system: analyzeSystem({
       bg: p.background,
@@ -52,7 +63,7 @@ async function generateDetail(pid: string, iid: string): Promise<void> {
       },
     }),
     schema: issueDetailSchema,
-  });
+  }).finally(() => endProgress(key));
   // 待っている間に他の保存が入っているかもしれないので、読み直してから書く
   const fresh = loadProject(pid);
   const target = fresh.issues.find((i) => i.id === iid);

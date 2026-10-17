@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import type { z } from "zod";
+import { type GenerateOpts, type generate, setAI } from "../src/ai/client";
 import { ensureDetail, hasDetail } from "../src/detail";
 import * as repo from "../src/repo";
 import { api, calls, installFakeAI, setup } from "./helpers/fake-ai";
@@ -50,9 +52,42 @@ test("見送りで増えた出来事は what_happens を残して story と sign
   expect(res.data.what_happens).toBe(parentWhat as string);
 });
 
+test("本文づくりの最中は progress が partial を返し、終わると消える", async () => {
+  const { pid, p } = await setup();
+  await ensureDetail(pid, "I1"); // 先読みを終わらせる
+  let release = () => {};
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  setAI((async (o: GenerateOpts<z.ZodType>) => {
+    o.onPartial?.('{"incident_story":"途');
+    await gate;
+    return o.schema.parse({
+      incident_story: "完成",
+      signals: [],
+      what_happens: "a",
+      who_is_affected: "b",
+      background_link: "",
+    });
+  }) as unknown as typeof generate);
+
+  const job = ensureDetail(pid, "I2");
+  const mid = await api<{
+    stage: string;
+    partial?: { incident_story: string };
+  }>("GET", `${p}/issues/I2/progress`);
+  expect(mid.data.stage).toBe("出来事の詳細を書いています");
+  expect(mid.data.partial?.incident_story).toBe("途");
+  release();
+  await job;
+  const done = await api("GET", `${p}/issues/I2/progress`);
+  expect(done.data).toEqual({ stage: null } as never);
+});
+
 test("detail ルート: 存在しない iid / pid は 404", async () => {
   const { p } = await setup();
   expect((await api("POST", `${p}/issues/I99/detail`)).status).toBe(404);
+  expect((await api("GET", `${p}/issues/I99/progress`)).status).toBe(404);
   expect(
     (await api("POST", "/api/projects/nope/issues/I1/detail")).status,
   ).toBe(404);
