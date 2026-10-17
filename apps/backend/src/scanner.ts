@@ -108,6 +108,13 @@ const RULES: Rule[] = [
       /\b\w*(path|file|dir)\w*\s*=\s*["'](?![/~$]|[A-Za-z]:)[^"'\s{}]+\.(db|sqlite3?|json|csv|log|txt)["']/i,
   },
   {
+    rule: "secret-compare",
+    title: "秘密の値を == で比べている（比較時間の差から推測される）",
+    // 秘密っぽい名前が ==/!= の片側にある行。None・null・"" との比較 (有無の確認) は拾わない
+    pattern:
+      /(?:(?:api[_-]?key|secret|token|password|passwd)[\w"'\])(.[]*\s*(?:===?|!==?)(?!\s*(?:(?:None|null|nil|undefined)\b|["']{2}))|(?<![=!<>])(?<!(?:\b(?:None|null|nil|undefined)|["']{2})\s*)(?:===?|!==?)(?!\s*(?:(?:None|null|nil|undefined)\b|["']{2}))\s*[\w."'[\]()-]*?(?:api[_-]?key|secret|token|password|passwd))/i,
+  },
+  {
     rule: "select-all-columns",
     title: "全カラム（SELECT *）をそのまま返している",
     pattern: /SELECT\s+\*\s+FROM/i,
@@ -205,6 +212,37 @@ function routeWithoutAuth(lines: string[]) {
   return out;
 }
 
+const CONNECT_RE = /(sqlite3|psycopg2|pymysql|mysql\.connector)\.connect\(/;
+const ASSIGN_RE = /^\s*(\w+)\s*(?::[^=]+)?=/;
+const DEF_RE = /^\s*(?:async\s+)?def\s/;
+
+/** DB 接続を開いているのに、その変数の close() も closing() も無いもの (with は commit するだけで閉じないので閉じたとは見ない) */
+// shortcut: Python の4つのドライバだけ・変数名で対応づける (別の関数が返した接続を呼び側で閉じる形は誤検知になる)。他言語は未対応、足すなら言語ごとの接続関数を CONNECT_RE に足す
+function unclosedConnection(lines: string[]) {
+  const out: { rule: string; title: string; idx: number }[] = [];
+  lines.forEach((line, idx) => {
+    if (CONNECT_RE.test(line) && !/\bclosing\(/.test(line)) {
+      const name = ASSIGN_RE.exec(line)?.[1];
+      // 同じ変数名 (conn など) を別の関数が閉じていても免除しない: 囲む関数の中だけ見る
+      let lo = idx;
+      while (lo > 0 && !DEF_RE.test(lines[lo])) lo--;
+      let hi = idx + 1;
+      while (hi < lines.length && !DEF_RE.test(lines[hi])) hi++;
+      if (
+        name &&
+        lines.slice(lo, hi).some((l) => l.includes(`${name}.close()`))
+      )
+        return;
+      out.push({
+        rule: "unclosed-connection",
+        title: "DBの接続を開いたまま閉じていない",
+        idx,
+      });
+    }
+  });
+  return out;
+}
+
 export function scan(root: string): Finding[] {
   const findings: Finding[] = [];
   const seen = new Set<string>();
@@ -247,7 +285,10 @@ export function scan(root: string): Finding[] {
       }
     });
     if (extname(f.name) === ".py") {
-      for (const r of routeWithoutAuth(lines)) {
+      for (const r of [
+        ...routeWithoutAuth(lines),
+        ...unclosedConnection(lines),
+      ]) {
         add(r.rule, r.title, f.rel, lines, r.idx);
       }
     }

@@ -25,7 +25,13 @@ export type KnownGap = {
 };
 
 /** 意図した一覧には無かったが、題材に実在する欠陥で、AI が見つけてよいもの (ai_extras の警告から外す) */
-export type AcceptedExtra = { match: string; file: string; note: string };
+export type AcceptedExtra = {
+  match: string;
+  /** "title" なら title に含まれるか、それ以外 (既定) は snippet に含まれるか */
+  by?: "line" | "title";
+  file: string;
+  note: string;
+};
 
 export type Golden = {
   findings: GoldenFinding[];
@@ -99,6 +105,20 @@ export const aCompanyApi: Golden = {
       note: "0.0.0.0 で待ち受けたままデバッグモードで公開している",
     },
     {
+      rule: "secret-compare",
+      match: "== PARTNER_API_KEY",
+      expect: "issue",
+      min_severity: "低",
+      note: "API キーを == で比較していて、比較にかかる時間の差からキーを推測される(タイミング攻撃)",
+    },
+    {
+      rule: "unclosed-connection",
+      match: "conn = sqlite3.connect(DB_PATH)",
+      expect: "issue",
+      min_severity: "低",
+      note: "リクエストのたびに接続が残り、長く動かすとファイル記述子が尽きる",
+    },
+    {
       rule: "route-without-auth",
       match: "/api/export",
       by: "title",
@@ -108,12 +128,6 @@ export const aCompanyApi: Golden = {
     },
   ],
   known_gaps: [
-    {
-      match: "conn = sqlite3.connect(DB_PATH)",
-      file: "app.py",
-      title: "DB 接続を閉じていない",
-      note: "リクエストのたびに接続が残り、長く動かすとファイル記述子が尽きる",
-    },
     {
       match: 'date = request.args.get("date")',
       file: "app.py",
@@ -125,12 +139,6 @@ export const aCompanyApi: Golden = {
       file: "app.py",
       title: "存在しない顧客の削除でも成功を返す",
       note: "退会処理が空振りしても成功に見え、気づけない",
-    },
-    {
-      match: 'request.headers.get("X-API-Key") == PARTNER_API_KEY',
-      file: "app.py",
-      title: "API キーを == で比較している",
-      note: "比較にかかる時間の差からキーを推測される(タイミング攻撃)",
     },
     {
       match: "flask-cors==4.0.1",
@@ -150,6 +158,18 @@ export const aCompanyApi: Golden = {
       match: ").fetchall()",
       file: "app.py",
       note: "件数の上限・ページ分けがなく、全件をメモリに読んで返す(purchases と search)",
+    },
+    {
+      match: "共通",
+      by: "title",
+      file: "app.py",
+      note: "全提携先で共通のキーで退会削除までできる、という実在の設計上の弱点(コメント19行目「全提携先で共通」)",
+    },
+    {
+      match: "購買履歴",
+      by: "title",
+      file: "app.py",
+      note: "退会で顧客だけ消えて購買履歴が残る、という実在の指摘",
     },
   ],
   arch: { kinds: ["internal", "db", "partner"] },

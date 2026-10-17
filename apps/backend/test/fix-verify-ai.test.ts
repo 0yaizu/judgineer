@@ -41,7 +41,7 @@ async function setupWith(i1: string[], i2: string[]) {
         title: "接続を閉じていない",
         file: "app.py",
         line: 1,
-        quote: "conn = sqlite3.connect(DB_PATH)",
+        quote: "conn.row_factory = sqlite3.Row", // スキャナの指摘と別の行
         why: "閉じ忘れで接続が溜まる",
       },
     ],

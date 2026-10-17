@@ -6,7 +6,7 @@ import { inside, isFile } from "./project";
 import { extraFindingsPrompt } from "./prompts/analyze";
 import { CODE_EXT, type Finding, snippet, splitLines } from "./scanner";
 
-const MAX_EXTRA = 8;
+const MAX_EXTRA = 10;
 const MIN_QUOTE = 5;
 const squash = (s: string) => s.replace(/\s+/g, "");
 
@@ -53,26 +53,42 @@ export function verifyCandidates(
   return out;
 }
 
-/** AI に追加の候補を出させ、引用が実在するものだけ返す。失敗しても本体の分析は続けたいので、例外は投げない */
+const FOCUSES = [
+  "入力の検証と結果の確認（未指定・不正な値、処理の結果を見ずに成功を返す条件）",
+  "認証・権限の範囲と、資源の上限（共通キー、全件を返す、件数の上限、ページ分け）",
+];
+
+/** AI に追加の候補を出させ、引用が実在するものだけ返す。失敗しても本体の分析は続けたいので、例外は投げない。
+ * 観点ごとに1回ずつ呼ぶので、AI の呼び出しは観点の数 (2回) になる */
 export async function extraFindings(a: {
   root: string;
   system: string;
   existing: Finding[];
 }): Promise<Finding[]> {
-  try {
-    const res = await generate({
-      task: "extra_findings",
-      system: a.system,
-      prompt: extraFindingsPrompt({ findings: a.existing }),
-      schema: extraFindingsResultSchema,
-    });
-    const max = Math.max(
-      0,
-      ...a.existing.map((f) => Number(f.id.slice(1)) || 0),
+  const results = await Promise.allSettled(
+    FOCUSES.map((focus) =>
+      generate({
+        task: "extra_findings",
+        system: a.system,
+        prompt: extraFindingsPrompt({ findings: a.existing, focus }),
+        schema: extraFindingsResultSchema,
+      }),
+    ),
+  );
+  const ok = results.filter((r) => r.status === "fulfilled");
+  if (ok.length === 0) {
+    console.warn(
+      "追加の指摘候補を探せませんでした:",
+      results.map((r) => (r.status === "rejected" ? r.reason : "")),
     );
-    return verifyCandidates(a.root, res.candidates, a.existing, max + 1);
-  } catch (e) {
-    console.warn("追加の指摘候補を探せませんでした:", e);
     return [];
   }
+  const max = Math.max(0, ...a.existing.map((f) => Number(f.id.slice(1)) || 0));
+  // 同じ行の重複は verifyCandidates が捨てる
+  return verifyCandidates(
+    a.root,
+    ok.flatMap((r) => r.value.candidates),
+    a.existing,
+    max + 1,
+  );
 }

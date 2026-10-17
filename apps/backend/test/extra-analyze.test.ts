@@ -12,7 +12,7 @@ import {
 
 installFakeAI();
 
-const REAL = "conn = sqlite3.connect(DB_PATH)";
+const REAL = "conn.row_factory = sqlite3.Row"; // スキャナの指摘と別の行
 const cand = (quote: string, title: string) => ({
   title,
   file: "app.py",
@@ -81,6 +81,29 @@ test("追加の指摘探しが失敗しても分析は成功する", async () =>
   const { project } = await setup();
   expect(project.findings.filter((f) => f.origin === "ai").length).toBe(0);
   expect(project.issues.length).toBe(2);
+});
+
+test("観点別に2回呼ばれ、結果が合流して同じ行は1件になる", async () => {
+  overrides.set("extra_findings", extras); // 2回とも同じ行を返す
+  overrides.set("issues", classify);
+  await setup();
+  const prompts = calls
+    .filter((c) => c.task === "extra_findings")
+    .map((c) => c.prompt);
+  expect(prompts.length).toBe(2);
+  expect(new Set(prompts).size).toBe(2);
+  for (const p of prompts) expect(p).toContain("今回の観点");
+});
+
+test("1回失敗しても、ほかの観点の結果は採用される", async () => {
+  let n = 0;
+  overrides.set("extra_findings", () => {
+    if (n++ === 0) throw new Error("boom");
+    return extras();
+  });
+  overrides.set("issues", classify);
+  const { project } = await setup();
+  expect(project.findings.filter((f) => f.origin === "ai").length).toBe(1);
 });
 
 test("再分析しても AI 由来の findings が重複して増えない", async () => {

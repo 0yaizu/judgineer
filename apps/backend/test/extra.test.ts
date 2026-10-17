@@ -98,25 +98,25 @@ test("root の外・存在しないファイル・コード以外は捨てる", 
   ).toEqual([]);
 });
 
-test("最大8件、id は firstId から連番", () => {
+test("最大10件、id は firstId から連番", () => {
   // 同じ行を指す候補は1件だけ
   expect(verify([cand({}), cand({ line: 3 })]).length).toBe(1);
   writeFileSync(
     join(root, "b.py"),
-    Array.from({ length: 9 }, (_, i) => `value_${i} = compute_${i}()`).join(
+    Array.from({ length: 13 }, (_, i) => `value_${i} = compute_${i}()`).join(
       "\n",
     ),
   );
   const out = verify(
-    Array.from({ length: 9 }, (_, i) =>
+    Array.from({ length: 13 }, (_, i) =>
       cand({ file: "b.py", line: i + 1, quote: `value_${i} = compute_${i}()` }),
     ),
     [],
     5,
   );
-  expect(out.length).toBe(8);
+  expect(out.length).toBe(10);
   expect(out.map((f) => f.id)).toEqual(
-    Array.from({ length: 8 }, (_, i) => `F${5 + i}`),
+    Array.from({ length: 10 }, (_, i) => `F${5 + i}`),
   );
 });
 

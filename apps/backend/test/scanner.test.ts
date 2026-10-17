@@ -122,6 +122,57 @@ test("scan: 認証なしのルートだけ拾う / 複数行のSQLも拾う", ()
   expect(found.filter((f) => f.rule === "sql-string-build")).toHaveLength(1);
 });
 
+test("scan: secret-compare は秘密の == 比較だけ拾い、有無の確認は拾わない", () => {
+  put(
+    "a.py",
+    [
+      'ok = request.headers.get("X-API-Key") == PARTNER_API_KEY', // 1
+      "if provided_token != expected:", // 2
+      "if token == None:", // 3
+      'if password == "":', // 4
+      "if token is None:", // 5
+      "if limit >= token_max:", // 6
+      "x = secret_value", // 7
+      "if user === api_key:", // 8
+      "if None != api_key:", // 9
+      "if null === token:", // 10
+      "",
+    ].join("\n"),
+  );
+  const lines = scan(root)
+    .filter((f) => f.rule === "secret-compare")
+    .map((f) => f.line);
+  expect(lines).toEqual([1, 2, 8]);
+});
+
+test("scan: unclosed-connection は閉じていない接続だけ拾う", () => {
+  put("open.py", "import sqlite3\nconn = sqlite3.connect(P)\n");
+  put("closed.py", "import sqlite3\nconn = sqlite3.connect(P)\nconn.close()\n");
+  // with は commit するだけで閉じない
+  put("with.py", "import sqlite3\nwith sqlite3.connect(P) as c:\n    pass\n");
+  put(
+    "closing.py",
+    "import sqlite3\nc = contextlib.closing(sqlite3.connect(P))\n",
+  );
+  // 1つ閉じていても、別の接続が閉じていなければ拾う。無関係な close() では免除しない
+  put(
+    "mixed.py",
+    "import sqlite3\na = sqlite3.connect(P)\nb = sqlite3.connect(Q)\na.close()\nf.close()\n",
+  );
+  // 別の関数が同じ変数名を閉じていても、こちらは閉じていない
+  put(
+    "scope.py",
+    "import sqlite3\ndef a():\n    conn = sqlite3.connect(P)\n    conn.close()\ndef b():\n    conn = sqlite3.connect(P)\n    return conn\n",
+  );
+  const found = scan(root).filter((f) => f.rule === "unclosed-connection");
+  expect(found.map((f) => `${f.file}:${f.line}`)).toEqual([
+    "mixed.py:3",
+    "open.py:2",
+    "scope.py:6",
+    "with.py:2",
+  ]);
+});
+
 test("relocate: 行がずれても snippet の行で探し直す", () => {
   put("app.py", "import os\n\n\nDEBUG = True\n");
   const [f] = scan(root);

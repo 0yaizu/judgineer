@@ -72,7 +72,10 @@ export function score(p: Project, golden: Golden): Check[] {
   const aiFound = p.findings.filter((f) => f.origin === "ai");
   const gaps = (golden.known_gaps ?? []).filter((g) => g.by_ai !== false);
   const hits = (g: KnownGap) =>
-    aiFound.filter((f) => f.file === g.file && f.snippet.includes(g.match));
+    // snippet は前後2行を含むので、近くの別の指摘が当たらないよう指摘の行そのもので見る
+    aiFound.filter(
+      (f) => f.file === g.file && findingLine(f).includes(g.match),
+    );
   const lostGaps = gaps.filter((g) => hits(g).length === 0);
   add(
     "gaps_found",
@@ -92,7 +95,9 @@ export function score(p: Project, golden: Golden): Check[] {
       .filter(
         (f) =>
           !(golden.accepted_extras ?? []).some(
-            (x) => x.file === f.file && f.snippet.includes(x.match),
+            (x) =>
+              x.file === f.file &&
+              (x.by === "title" ? f.title : f.snippet).includes(x.match),
           ),
       )
       .map((f) => `${f.file}:${f.line} ${f.title}`),

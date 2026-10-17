@@ -64,13 +64,15 @@ const issue = (
   ...over,
 });
 
-// expect "issue" の7件 (F1,F2,F3,F4,F6,F8,F9) を1件ずつ issue に、either の3件 (F0, F5, F7) は見送り
+// expect "issue" のものを1件ずつ issue に、either (F0, F5, F7) は見送り
+const idx = (want: string) =>
+  golden.findings.flatMap((g, n) => (g.expect === want ? [n] : []));
 const good = (): Project =>
   ({
     findings: [...findings, ...gapFindings],
-    issues: [1, 2, 3, 4, 6, 8, 9].map((n, k) => issue(k + 1, [`F${n}`])),
+    issues: idx("issue").map((n, k) => issue(k + 1, [`F${n}`])),
     dismissed: [
-      ...[0, 5, 7].map((n) => `F${n}`),
+      ...idx("either").map((n) => `F${n}`),
       ...gapFindings.map((g) => g.id),
     ].map((finding_id) => ({ finding_id, reason: "r" })),
     architecture: {
