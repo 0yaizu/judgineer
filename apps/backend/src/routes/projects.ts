@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { type Background, backgroundSchema, SIM_DAYS } from "@tka/shared";
 import { Hono } from "hono";
 import { z } from "zod";
+import { cancelSession } from "../ai/session";
 import { analyze } from "../analyze";
 import { settled } from "../clean";
 import { HttpError, readBody } from "../http";
@@ -56,6 +57,12 @@ export default new Hono()
     return c.json(getProgress(c.req.param("pid")));
   })
   .post("/:pid/analyze", async (c) => c.json(await analyze(c.req.param("pid"))))
+  // 画面のキャンセルボタン: このセッションで動いている AI の生成 (claude のプロセス) を全部止める
+  .post("/:pid/cancel", (c) => {
+    const pid = c.req.param("pid");
+    loadProject(pid);
+    return c.json({ cancelled: cancelSession(pid) });
+  })
   // 未対応の出来事より先には進めない
   .post("/:pid/sim", async (c) => {
     const p = loadProject(c.req.param("pid"));
