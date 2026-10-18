@@ -209,11 +209,15 @@ function Register() {
   };
 
   const filled = FIELDS.filter((f) => bg[f.key].trim()).length;
-  const blocked = !target?.exists
-    ? "検査するフォルダが見つかると、作れるようになります"
-    : !bg.title.trim()
-      ? "アプリ名を入れると、作れるようになります"
-      : "";
+  const ready = !!target?.exists && !!bg.title.trim();
+  // 押せない理由。フォルダを読み込み中は理由を出さない
+  const blocked = !target
+    ? ""
+    : !target.exists
+      ? "検査するフォルダが見つかると、作れるようになります"
+      : !bg.title.trim()
+        ? "アプリ名を入れると、作れるようになります"
+        : "";
   const editing = app ? apps.find((a) => a.id === app) : undefined;
 
   return (
@@ -351,7 +355,7 @@ function Register() {
                 <button
                   type="button"
                   className={pillClass}
-                  disabled={!!blocked}
+                  disabled={!ready}
                   onClick={submit}
                 >
                   運用シミュレーションを作る

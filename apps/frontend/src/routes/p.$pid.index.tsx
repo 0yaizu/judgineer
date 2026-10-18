@@ -624,24 +624,22 @@ function Simulation({
           className={`grid transition-[grid-template-rows,opacity] duration-500 ease-in-out ${seekbarOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
         >
           <div className="overflow-hidden">
-            <div className="relative">
-              <Seekbar
-                day={day}
-                total={SIM_DAYS}
-                limit={limit}
-                markers={markers}
-                playing={playing}
-                speed={speed}
-                onToggle={toggle}
-                onSpeed={(s) => setSpeed(s === 3 ? 3 : 1)}
-                onSeek={seek}
-                blockedMessage={
-                  openIssue
-                    ? `${openIssue.day}日目の出来事に対応するか見送るまで、先へは進めません`
-                    : undefined
-                }
-              />
-            </div>
+            <Seekbar
+              day={day}
+              total={SIM_DAYS}
+              limit={limit}
+              markers={markers}
+              playing={playing}
+              speed={speed}
+              onToggle={toggle}
+              onSpeed={(s) => setSpeed(s === 3 ? 3 : 1)}
+              onSeek={seek}
+              blockedMessage={
+                openIssue
+                  ? `${openIssue.day}日目の出来事に対応するか見送るまで、先へは進めません`
+                  : undefined
+              }
+            />
           </div>
         </div>
         <div
