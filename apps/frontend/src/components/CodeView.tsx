@@ -1,5 +1,6 @@
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { Fragment, useEffect, useRef, useState } from "react";
+import { PathBar } from "#/components/PathBar";
 import { api } from "#/lib/api";
 import type { Finding } from "#/lib/types";
 
@@ -51,15 +52,17 @@ export function CodeView({
             key={f}
             type="button"
             onClick={() => setFile(f)}
+            title={f}
             className={`px-3.5 py-2 font-mono text-[12.5px] ${f === file ? "border-t-2 border-[#f2cc60] bg-[#161b22] text-[#e6edf3]" : "border-t-2 border-transparent text-[#8b949e] hover:text-[#e6edf3]"}`}
           >
-            {f}
+            {f.split("/").pop()}
             <span className="ml-2 rounded-lg bg-[#ff9b85] px-1.5 text-[11px] text-[#161b22]">
               {findings.filter((x) => x.file === f).length}
             </span>
           </button>
         ))}
       </div>
+      <PathBar file={file} />
       {error && <p className="p-3 text-sm text-error">{error}</p>}
       <section
         ref={bodyRef}
