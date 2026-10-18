@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
+import { Logo } from "#/components/Logo";
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { api } from "#/lib/api";
 import type { AIConfig } from "#/lib/types";
@@ -30,6 +31,17 @@ export const Route = createRootRoute({
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      // 見出し用の太いゴシック（--font-display）
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      {
+        rel: "preconnect",
+        href: "https://fonts.gstatic.com",
+        crossOrigin: "anonymous",
+      },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@800&display=swap",
       },
     ],
   }),
@@ -75,8 +87,9 @@ function AppHeader() {
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-7 px-4 sm:px-6">
         <Link
           to="/"
-          className="inline-flex items-baseline gap-2 text-[17px] font-bold text-foreground hover:text-foreground"
+          className="inline-flex items-center gap-2 font-display text-[17px] font-extrabold text-foreground hover:text-foreground"
         >
+          <Logo className="size-7 text-ink" />
           ジャッジニア
           <span className="text-xs font-medium tracking-wider text-muted-foreground">
             Judgineer

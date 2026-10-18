@@ -58,10 +58,13 @@
   --color-line-soft: var(--line-soft);
   --color-tint: var(--tint);
   --color-warn-tint: var(--warn-tint);
+  --color-ink: var(--ink);
 
   --font-sans:
     "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  /* 見出し用（タイトル画面・各ページの見出し） */
+  --font-display: "M PLUS 1p", var(--font-sans);
 
   --radius-xs: calc(var(--radius) - 0.375rem);
   --radius-sm: calc(var(--radius) - 0.25rem);
@@ -117,6 +120,8 @@
   --line-soft: #e9edf0;
   --tint: #eef5f1;
   --warn-tint: #fdf1ea;
+  /* ロゴの線と、主ボタンの色 */
+  --ink: #1b1f2a;
 
   /* sidebar variables */
   --sidebar-background: var(--color-neutral-50);
@@ -162,6 +167,7 @@
   --line-soft: #222b31;
   --tint: #172a24;
   --warn-tint: #2d2019;
+  --ink: #e6ebef;
 
   /* sidebars variables */
   --sidebar-background: var(--color-neutral-900);
