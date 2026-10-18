@@ -42,7 +42,7 @@ judgineer help
   <a href="https://youtu.be/Xkc3gpJLOJ4"><img src="docs/images/home.png" alt="ジャッジニアのホーム画面（クリックするとデモ動画が開きます）" width="640"></a>
 </p>
 
-- デモ動画：[YouTube](https://youtu.be/Xkc3gpJLOJ4)（登録から、2件の問題を直して3件目が起きるまで）
+- デモ動画：[YouTube](https://youtu.be/Xkc3gpJLOJ4)
 - 説明スライド：[judgineer-slides.pdf](docs/judgineer-slides.pdf)
 
 ## 概要
