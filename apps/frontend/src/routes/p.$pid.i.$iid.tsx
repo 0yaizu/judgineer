@@ -39,7 +39,8 @@ export const Route = createFileRoute("/p/$pid/i/$iid")({
   component: IssueRoute,
 });
 
-const STEPS = ["調べる", "決める", "直す", "振り返る"];
+// 「直す」は反映を待つだけで若手の操作がないので、「決める」とまとめて1つのステップにしている
+const STEPS = ["調べる", "決めて直す", "振り返る"];
 
 type Tab = "code" | "infra" | "log" | "fix";
 type Busy = "" | "start" | "chat" | "hint" | "commit" | "skip";
@@ -142,17 +143,17 @@ function DetailGate({
 }
 
 function stepOf(i: Issue, busy: Busy): number {
-  if (busy === "commit") return 2;
+  if (busy === "commit") return 1;
   switch (i.phase) {
     case "decide":
     case "ready":
       return 1;
     case "reflect":
-      return 3;
+      return 2;
     case "done":
-      return 4;
+      return 3;
     default:
-      return i.fix ? 3 : 0;
+      return i.fix ? 2 : 0;
   }
 }
 
@@ -162,8 +163,8 @@ function stepStarts(i: Issue): (number | null)[] {
   return [
     i.chat.length > 0 ? 0 : null,
     i.decide_at ?? null,
+    // 「修正を反映しました」のカードから振り返りが始まる
     fix >= 0 ? fix : null,
-    fix >= 0 ? Math.min(fix + 1, i.chat.length - 1) : null,
   ];
 }
 
@@ -187,7 +188,6 @@ function IssuePage({
   const [tab, setTab] = useState<Tab>(
     initial.view === "infra" ? "infra" : "code",
   );
-  const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [awayFromEnd, setAwayFromEnd] = useState(false);
   // 会話を遡って見ているステップ。最新を見ているとき（今のステップ）は null
@@ -297,9 +297,12 @@ function IssuePage({
     setPlan(issue.plan_draft?.plan ?? "");
   }, [issue.plan_draft?.plan]);
 
+  // 発言が増えたら、会話欄の中だけを最新までスクロールする。
+  // scrollIntoView だとページ全体もスクロールし、会話欄が sticky なので、ページの一番上に飛ばされてしまう
   // biome-ignore lint/correctness/useExhaustiveDependencies: 発言の数と待ち状態が変わったときだけ動かす
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const list = listRef.current;
+    list?.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
   }, [issue.chat.length, busy]);
 
   const run = async (kind: Busy, fn: () => Promise<void>) => {
@@ -586,7 +589,7 @@ function IssuePage({
                 aria-hidden
                 className="pointer-events-none absolute top-3 bottom-3 left-3 rounded-full bg-primary transition-[transform,opacity] duration-500 ease-in-out"
                 style={{
-                  width: "calc((100% - 1.5rem - 1.125rem) / 4)",
+                  width: `calc((100% - 1.5rem - ${(STEPS.length - 1) * 0.375}rem) / ${STEPS.length})`,
                   transform: `translateX(calc(${shown} * (100% + 0.375rem)))`,
                   opacity: shown < STEPS.length ? 1 : 0,
                 }}
@@ -651,7 +654,6 @@ function IssuePage({
                     <p className="text-sm">{issue.lesson}</p>
                   </div>
                 )}
-                <div ref={endRef} />
               </div>
               {awayFromEnd && (
                 <Button
