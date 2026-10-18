@@ -96,33 +96,75 @@ AI に聞けば答えが返ってくる、という使い方をあえてやめ�
 ## 開発技術
 ### 活用した技術
 #### API・データ
-* 
-* 
+* Claude Code（`claude` コマンド）: 構成図・利用シナリオ・出来事の台本・修正案の生成に使う。API キーは使わず、手元のログイン（Pro プラン）で動かす
+* SQLite: 解析結果や会話の履歴をローカルに保存する
 
 #### フレームワーク・ライブラリ・モジュール
 * フロントエンド: TanStack Start（SPA モード）/ React 19 / Tailwind CSS v4 / Starwind UI
 * バックエンド: Hono / Drizzle ORM（SQLite）
 * 共通: zod（フロント・バックで共有するスキーマ）/ Bun / Turborepo / Biome
 
-#### デバイス
-* 
-* 
+#### 技術スタック図
+```mermaid
+flowchart LR
+  subgraph fe["フロントエンド (apps/frontend)"]
+    direction TB
+    react["React 19"]
+    tss["TanStack Start (SPA) / Router"]
+    ui["Tailwind CSS v4 / Starwind UI"]
+    dagre["dagre (構成図のレイアウト)"]
+    hc["Hono RPC クライアント hc"]
+    react --- tss
+    react --- ui
+    react --- dagre
+    tss --- hc
+  end
+
+  subgraph shared["packages/shared"]
+    zod["zod スキーマ"]
+  end
+
+  subgraph be["バックエンド (apps/backend)"]
+    direction TB
+    hono["Hono"]
+    drizzle["Drizzle ORM"]
+    sqlite[("SQLite (bun:sqlite)")]
+    scanner["独自スキャナ<br/>(ルールで根拠の行を拾う)"]
+    hono --> drizzle --> sqlite
+    hono --> scanner
+  end
+
+  claude["Claude Code CLI<br/>(claude -p / Pro プラン)"]
+
+  subgraph tool["開発・配布"]
+    direction TB
+    bun["Bun (ランタイム / パッケージ管理 / bun build --compile)"]
+    turbo["Turborepo"]
+    biome["Biome (lint / format)"]
+    gha["GitHub Actions<br/>(CI / Release)"]
+    bin["単体バイナリ judgineer<br/>5 OS / CPU 向け"]
+    bun --> bin
+    gha --> bin
+  end
+
+  hc -- "/api (型は AppType で共有)" --> hono
+  zod -.-> fe
+  zod -.-> be
+  hono -- "子プロセスで起動 (stream-json)" --> claude
+  tool -.-> fe
+  tool -.-> be
+```
 
 ### 独自技術
 #### ハッカソンで開発した独自機能・技術
 * 独自で開発したものの内容をこちらに記載してください
 * 特に力を入れた部分をファイルリンク、またはcommit_idを記載してください。
 
-## 開発者向けセットアップ
-### 構成
+## Install
+```sh
+curl -fsSL https://raw.githubusercontent.com/jphacks/tka_2607/main/install.sh | bash
 ```
-apps/frontend    TanStack Start (SPA) + React + Starwind UI   http://localhost:3000
-apps/backend     Hono + Drizzle (bun:sqlite)                  http://127.0.0.1:3001
-packages/shared  zod スキーマ（フロント・バック共有）
-```
-
-### 必要なもの
-* [Bun](https://bun.com/) 1.4 以上（Node.js / pnpm は不要）
+Linux / macOS / Windows（Git Bash から実行）に対応。`~/.judgineer` に置かれ、`judgineer` コマンドが使えるようになる。AI の機能には Claude Code（`claude`）が必要。
 
 ### コマンド
 ```sh
@@ -135,17 +177,22 @@ bun run check        # lint と format の検査（Biome）
 bun run format       # lint と format の自動修正（Biome）
 ```
 
+## 開発者向けセットアップ
+### 構成
+```
+apps/frontend    TanStack Start (SPA) + React + Starwind UI   http://localhost:3000
+apps/backend     Hono + Drizzle (bun:sqlite)                  http://127.0.0.1:3001
+packages/shared  zod スキーマ（フロント・バック共有）
+```
+
+### 必要なもの
+* [Bun](https://bun.com/) 1.4 以上（Node.js / pnpm は不要）
+
 * 開発時、フロントの `/api` はバックエンドへプロキシされる。
 * バックエンドの環境変数は `apps/backend/.env.example` を参照（`PORT`、`DATABASE_URL`）。
 * 開発時は、起動時に環境変数 `TARGET_DIR`（既定は `samples/a_company_api`）を検査対象の一覧へ足す。デモ用の題材が `samples/` にあるので、そのまま `bun run dev` すると試せる。
 * 修正は検査対象のコピー（`data/projects/<id>/current`）にだけ入り、元のファイルは変わらない。
 * VS Code では拡張機能「Biome」（`biomejs.biome`）を入れると、保存時に lint と format が自動で走る。
-
-### インストールして使う（judgineer コマンド）
-```sh
-curl -fsSL https://raw.githubusercontent.com/jphacks/tka_2607/main/install.sh | bash
-```
-Linux / macOS / Windows（Git Bash から実行）に対応。`~/.judgineer` に置かれ、`judgineer` コマンドが使えるようになる。AI の機能には Claude Code（`claude`）が必要。
 
 ### judgineer コマンド（単体バイナリ）
 `bun run build && bun run build:binary` で `dist-bin/` に OS ごとの単体バイナリを作れる。
