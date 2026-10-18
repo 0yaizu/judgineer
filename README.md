@@ -64,6 +64,12 @@ bun run format       # lint と format の自動修正（Biome）
 * 修正は検査対象のコピー（`data/projects/<id>/current`）にだけ入り、元のファイルは変わらない。
 * VS Code では拡張機能「Biome」（`biomejs.biome`）を入れると、保存時に lint と format が自動で走る。
 
+### インストールして使う（judgineer コマンド）
+```sh
+curl -fsSL https://raw.githubusercontent.com/jphacks/tka_2607/main/install.sh | bash
+```
+Linux / macOS / Windows（Git Bash から実行）に対応。`~/.judgineer` に置かれ、`judgineer` コマンドが使えるようになる。AI の機能には Claude Code（`claude`）が必要。
+
 ### judgineer コマンド（単体バイナリ）
 `bun run build && bun run build:binary` で `dist-bin/` に OS ごとの単体バイナリを作れる。
 
@@ -72,8 +78,10 @@ judgineer help        # コマンドの一覧
 judgineer load        # 今いるフォルダをプロジェクトの一覧に加えて、ブラウザで開く（ディレクトリも指定できる）
 judgineer start       # サーバーだけを裏で起動する
 judgineer stop        # サーバーを止める
+judgineer update      # 最新のリリースを確認し、新しい版があれば置き換える（--check は確認だけ）
+judgineer uninstall   # 削除する（--purge で解析データも消す）
 ```
 
-リリースは `.github/workflows/release.yml` が、公開時に 5 つの OS / CPU 向けの単体バイナリと `SHA256SUMS` を添付する。
+リリースは `.github/workflows/release.yml` が、公開時に 5 つの OS / CPU 向けの単体バイナリと `SHA256SUMS` を添付する。ビルド中でバイナリが無いときは、`install.sh` が最新から 5 件前までさかのぼって探す。
 
 詳しい開発ルールは [AGENTS.md](./AGENTS.md) を参照。
