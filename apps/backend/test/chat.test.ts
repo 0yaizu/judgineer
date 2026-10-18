@@ -11,6 +11,7 @@ import {
   installFakeAI,
   type Payload,
   setup,
+  TARGET,
 } from "./helpers/fake-ai";
 
 installFakeAI();
@@ -82,7 +83,7 @@ test("会話 → 方針の確定 → 反映 → 振り返り → メモ", async 
     ),
   ).toBe(srcBefore);
   expect(readFileSync(outside, "utf8")).toBe("orig");
-  expect(readFileSync(join(config.targetDir, "app.py"), "utf8")).toBe(appPy);
+  expect(readFileSync(join(TARGET, "app.py"), "utf8")).toBe(appPy);
 
   // 反映後も、未対応の出来事(副作用の I3)より先へは進めない
   const sim = await api<{ sim_day: number; limit: number }>(

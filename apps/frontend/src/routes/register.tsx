@@ -1,4 +1,4 @@
-import { IconArrowRight } from "@tabler/icons-react";
+import { IconArrowRight, IconX } from "@tabler/icons-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ErrorBox } from "#/components/ErrorBox";
@@ -21,14 +21,14 @@ import { Waiting } from "#/components/Waiting";
 import { api } from "#/lib/api";
 import type { AppSummary, Background, Target } from "#/lib/types";
 
+const RECENT = 5;
+
 export const Route = createFileRoute("/register")({
-  // ?app=<id> で、登録済みのアプリの背景を入れた状態で開く
+  // ?app=<id> で、そのアプリのフォルダを選び、登録済みの背景を入れた状態で開く (judgineer load もこの URL を開く)
   validateSearch: (s: Record<string, unknown>): { app?: string } =>
     typeof s.app === "string" ? { app: s.app } : {},
   component: Register,
 });
-
-const RECENT = 5;
 
 const FIELDS: {
   key: keyof Background;
@@ -91,7 +91,7 @@ const EMPTY: Background = {
 };
 
 // 検査対象に background.json があれば、それを下書きにする
-const draftFrom = (t: Target | null): Background => ({
+const draftFrom = (t: Target | undefined): Background => ({
   ...EMPTY,
   ...Object.fromEntries(
     Object.entries(t?.background ?? {}).filter(
@@ -104,7 +104,8 @@ function Register() {
   const navigate = useNavigate();
   const { app } = Route.useSearch();
   const [apps, setApps] = useState<AppSummary[]>([]);
-  const [target, setTarget] = useState<Target | null>(null);
+  const [targets, setTargets] = useState<Target[] | null>(null);
+  const [targetId, setTargetId] = useState<string | undefined>(app);
   const [bg, setBg] = useState<Background>(EMPTY);
   const [draft, setDraft] = useState<Background>(EMPTY);
   const [busyPid, setBusyPid] = useState<string | null>(null);
@@ -116,21 +117,50 @@ function Register() {
       .apps()
       .then(setApps)
       .catch(() => {});
-    Promise.all([api.target(), app ? api.app(app) : null])
-      .then(([t, a]) => {
-        const d = a ? { ...EMPTY, ...a.background } : draftFrom(t);
-        setTarget(t);
+    Promise.all([api.targets(), app ? api.app(app) : null])
+      .then(([list, a]) => {
+        setTargets(list);
+        // URL で指定されたフォルダ、なければ最後に読み込んだもの (一覧は新しい順)
+        const first = list.find((t) => t.id === app) ?? list[0];
+        const d = a?.background
+          ? { ...EMPTY, ...a.background }
+          : draftFrom(first);
+        setTargetId(first?.id);
         setDraft(d);
         setBg(d);
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => setError((e as Error).message));
   }, [app]);
+
+  const target = targets?.find((t) => t.id === targetId);
+
+  const choose = (t: Target) => {
+    setTargetId(t.id);
+    setDraft(draftFrom(t));
+    setBg(draftFrom(t));
+  };
+
+  const remove = async (t: Target) => {
+    try {
+      await api.removeTarget(t.id);
+      const rest = (targets ?? []).filter((x) => x.id !== t.id);
+      setTargets(rest);
+      if (t.id === targetId) {
+        setTargetId(rest[0]?.id);
+        setDraft(draftFrom(rest[0]));
+        setBg(draftFrom(rest[0]));
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
 
   const submit = async () => {
     setBusy(true);
     setError("");
     try {
-      const p = await api.createProject(bg, app);
+      if (!target) return;
+      const p = await api.createProject(target.id, bg);
       setBusyPid(p.id);
       await api.analyze(p.id);
       navigate({ to: "/p/$pid", params: { pid: p.id } });
@@ -151,29 +181,64 @@ function Register() {
           </p>
         </div>
 
-        <Alert variant={target && !target.exists ? "error" : "info"}>
-          <AlertTitle>1. アプリのコード</AlertTitle>
-          <AlertDescription>
-            {target ? (
-              target.exists ? (
-                <>
-                  検査するフォルダ:{" "}
-                  <code className="break-all">{target.dir}</code>
-                  <br />
-                  登録するとコードのコピーを取り、元のファイルは変えません。別のアプリにするときは、環境変数
-                  TARGET_DIR を変えて起動し直してください。
-                </>
-              ) : (
-                <>
-                  検査するフォルダが見つかりません:{" "}
-                  <code className="break-all">{target.dir}</code>
-                </>
-              )
-            ) : (
-              "読み込み中…"
+        <Card>
+          <CardHeader>
+            <CardTitle>1. アプリのコード</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              登録するとコードのコピーを取り、元のファイルは変えません。
+            </p>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {targets === null && (
+              <p className="text-sm text-muted-foreground">読み込み中…</p>
             )}
-          </AlertDescription>
-        </Alert>
+            {targets?.length === 0 && (
+              <Alert variant="info">
+                <AlertTitle>検査するフォルダがありません</AlertTitle>
+                <AlertDescription>
+                  アプリのフォルダでターミナルを開き、
+                  <code>judgineer load</code>{" "}
+                  を実行してください。ここに追加されます。
+                </AlertDescription>
+              </Alert>
+            )}
+            <ul className="grid gap-2">
+              {targets?.map((t) => (
+                <li
+                  key={t.id}
+                  className={`flex items-center gap-2 rounded-md border p-3 ${
+                    t.id === targetId ? "border-primary bg-primary/5" : ""
+                  }`}
+                >
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() => choose(t)}
+                    aria-pressed={t.id === targetId}
+                  >
+                    <span className="font-medium">{t.name}</span>
+                    {!t.exists && (
+                      <span className="ml-2 text-sm text-destructive">
+                        見つかりません
+                      </span>
+                    )}
+                    <code className="block truncate text-xs text-muted-foreground">
+                      {t.path}
+                    </code>
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label="一覧から外す"
+                    onClick={() => remove(t)}
+                  >
+                    <IconX />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>

@@ -72,6 +72,17 @@ PATH=/tmp/npm-shim:$PATH bunx --bun starwind@latest add button -y
 
 - DB は SQLite。ファイルは `DATABASE_URL`（既定 `<DATA_DIR>/app.db`、つまり `data/app.db`）。起動時にマイグレーション（`apps/backend/drizzle`）を自動で流す。`*.db` はコミットしない。
 - マイグレーション: `bun run db:generate` → `bun run db:migrate`（`apps/backend` で実行）。
-- テストは `bun test`（`apps/backend/test/` 配下。`src/` の構成を写す。環境変数は `test/setup.ts` で固定）。`bunfig.toml` の preload（`test/setup.ts`）が `DATABASE_URL=:memory:`・一時の `DATA_DIR`・`TARGET_DIR=samples/a_company_api` を設定する。AI は `setAI` で偽物に差し替え、実際の `claude` は呼ばない。
-- 検査対象は `TARGET_DIR`（未設定なら `samples/a_company_api`。ホームフォルダと `/` は指定できない）。登録時に `DATA_DIR/projects/<id>/src` へスナップショットし、修正は `current/` にだけ入れる（元のファイルは変えない）。
-- デモ用の題材は `samples/`。`TARGET_DIR` 未設定でもこれが選ばれる。
+- テストは `bun test`（`apps/backend/test/` 配下。`src/` の構成を写す。環境変数は `test/setup.ts` で固定）。`bunfig.toml` の preload（`test/setup.ts`）が `DATABASE_URL=:memory:`・一時の `DATA_DIR`・`TARGET_DIR=samples/a_company_api`（テストが使う検査対象）を設定する。AI は `setAI` で偽物に差し替え、実際の `claude` は呼ばない。`JUDGINEER_HOME` も一時フォルダに固定する。
+- 検査対象のフォルダは DB の `apps` テーブル（`path` のある行）に一覧で持つ。`judgineer load` が足し、フロントの一覧から選んで登録する（`POST /api/projects` は `target_id` を取る）。ホームフォルダと `/` は足せない（`src/targets.ts`）。
+- 開発時（`bun run dev`）は起動時に `TARGET_DIR`（未設定なら `samples/a_company_api`）を一覧へ足す。`seedTargets` が行う。
+- プロジェクト登録時に `DATA_DIR/projects/<id>/src` へスナップショットし、修正は `current/` にだけ入れる（元のファイルは変えない）。
+- デモ用の題材は `samples/`。
+
+## 配布（単体バイナリ `judgineer`）
+
+- `apps/backend/src/main.ts` が CLI のエントリ。`bun scripts/build-binary.ts [--version vX] [target...]` が、`bun build --compile` で 5 ターゲット（linux-x64 / linux-arm64 / darwin-x64 / darwin-arm64 / windows-x64）の `dist-bin/judgineer-<target>[.exe]` を作る。先に `bun run build` でフロントをビルドしておく。
+- フロントのビルド結果とマイグレーション（`apps/backend/drizzle`）は `assets.tar` として埋め込む。実行時にファイルとして読むもので、import で辿れないため、そのままでは `bun build --compile` に入らない。読み出しは `src/assets.ts`。`src/db/index.ts` が一時フォルダへ書き出して migrate し、`src/server.ts` が `/api` 以外を埋め込みのフロントから返す（無いパスは SPA 用に `_shell.html`）。
+- DB・スナップショットは `~/.judgineer/data`（`JUDGINEER_HOME` で変更）。サーバーの状態は `~/.judgineer/run/`。
+- コマンド: `judgineer help | start | load [dir] | stop | version`。実装は `src/cli/`。`start`/`load` はサーバー（内部コマンド `serve`）を切り離して裏で動かす。
+- `scripts/smoke-binary.sh` が、ビルドしたバイナリの起動・GUI 配信・`load` を確かめる（CI でも実行）。
+- Windows 向けは、クロスコンパイルできることまでしか確認していない（実機では未検証）。

@@ -1,39 +1,92 @@
 import { expect, test } from "bun:test";
-import { readdirSync } from "node:fs";
-import { config } from "../src/config";
-import { api, calls, installFakeAI, setup } from "./helpers/fake-ai";
+import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+import { eq } from "drizzle-orm";
+import { db } from "../src/db";
+import { apps } from "../src/db/schema";
+import * as repo from "../src/repo";
+import { registerTarget } from "../src/targets";
+import { api, calls, installFakeAI, setup, TARGET } from "./helpers/fake-ai";
 
 installFakeAI();
 
-test("config / target", async () => {
-  const cfg = await api<{
-    status: { ok: boolean };
-    target: { exists: boolean };
-  }>("GET", "/api/config");
+test("config", async () => {
+  const cfg = await api<{ status: { ok: boolean } }>("GET", "/api/config");
   expect(cfg.data.status.ok).toBe(false); // CLAUDE_BIN は存在しない
-  expect(cfg.data.target.exists).toBe(true);
-  const t = await api<{ exists: boolean; background: { title: string } }>(
-    "GET",
-    "/api/target",
-  );
-  expect(t.data.exists).toBe(true);
-  expect(t.data.background.title).toContain("A社");
+});
+
+test("targets: 一覧・登録・外す", async () => {
+  const t = registerTarget(TARGET);
+  const again = registerTarget(TARGET); // 同じフォルダは増えず、読み込んだ日時だけ更新
+  expect(again.id).toBe(t.id);
+  const list = await api<
+    { id: string; exists: boolean; background: { title: string } }[]
+  >("GET", "/api/targets");
+  const mine = list.data.find((x) => x.id === t.id);
+  expect(mine?.exists).toBe(true);
+  expect(mine?.background.title).toContain("A社");
+  expect(list.data.filter((x) => x.id === t.id).length).toBe(1);
+
+  const other = registerTarget(mkdtempSync(join(tmpdir(), "tka-other-")));
+  expect((await api("DELETE", `/api/targets/${other.id}`)).status).toBe(200);
+  expect((await api("DELETE", `/api/targets/${other.id}`)).status).toBe(404);
+});
+
+test("targets: path の無いアプリは一覧に出ず、外せない。背景つきは外してもアプリが残る", async () => {
+  const at = new Date().toISOString();
+  db.insert(apps)
+    .values({ id: "legacy", name: "旧アプリ", createdAt: at, updatedAt: at })
+    .run();
+  const list = await api<{ id: string }[]>("GET", "/api/targets");
+  expect(list.data.some((x) => x.id === "legacy")).toBe(false);
+  expect((await api("DELETE", "/api/targets/legacy")).status).toBe(404);
+
+  const t = registerTarget(mkdtempSync(join(tmpdir(), "tka-bg-")));
+  db.update(apps)
+    .set({ background: { title: "登録済み" } as never })
+    .where(eq(apps.id, t.id))
+    .run();
+  expect(repo.removeTarget(t.id)).toBe(true);
+  const row = db.select().from(apps).where(eq(apps.id, t.id)).get();
+  expect(row?.path).toBeNull();
+  expect(row?.background).not.toBeNull();
+});
+
+test("targets: ホームと / は登録できない", () => {
+  expect(() => registerTarget(homedir())).toThrow();
+  expect(() => registerTarget("/")).toThrow();
+  expect(() => registerTarget("/nonexistent-dir-xyz")).toThrow();
 });
 
 test("登録の入力検査", async () => {
+  const t = registerTarget(TARGET);
+  const bg = { title: "  " };
   expect(
-    (await api("POST", "/api/projects", { background: { title: "  " } }))
+    (await api("POST", "/api/projects", { target_id: t.id, background: bg }))
       .status,
   ).toBe(400);
   expect((await api("POST", "/api/projects", {})).status).toBe(400);
+  // 一覧にないフォルダ
+  expect(
+    (
+      await api("POST", "/api/projects", {
+        target_id: "nope",
+        background: { title: "x" },
+      })
+    ).status,
+  ).toBe(404);
   expect((await api("GET", "/api/projects/nope")).status).toBe(404);
 });
 
-test("analyze: 4回の呼び出しで system が同じで、arch が先頭", async () => {
-  const before = readdirSync(config.targetDir).sort();
+test("analyze: 7回の呼び出しで system が同じで、arch が先頭", async () => {
+  const before = readdirSync(TARGET).sort();
   const { project } = await setup();
   expect(calls.map((c) => c.task).sort()).toEqual([
     "arch",
+    "detail", // 一番早い出来事の本文の先読み
+    "extra_findings", // arch と並列 (追加の指摘探し。観点ごとに2回)
+    "extra_findings",
     "flows",
     "flows_all",
     "issues",
@@ -52,7 +105,7 @@ test("analyze: 4回の呼び出しで system が同じで、arch が先頭", asy
   ]);
   expect(project.issues[0]?.affected_nodes).toEqual(["api"]);
   expect(project.sim_days).toBe(180);
-  expect(readdirSync(config.targetDir).sort()).toEqual(before);
+  expect(readdirSync(TARGET).sort()).toEqual(before);
 });
 
 test("file: パストラバーサルを拒否する", async () => {
@@ -78,25 +131,31 @@ test("file: パストラバーサルを拒否する", async () => {
   }
 });
 
-test("apps: 新規登録で増え、app_id つきの登録は同じアプリの背景を更新する", async () => {
+test("apps: 読み込んだだけでは一覧に出ず、登録で載り、同じフォルダの再登録は背景を更新する", async () => {
   type AppList = { id: string; title: string }[];
+  const dir = mkdtempSync(join(tmpdir(), "tka-app-"));
+  writeFileSync(join(dir, "app.py"), "print('hi')\n");
+  const t = registerTarget(dir);
   const before = (await api<AppList>("GET", "/api/apps")).data;
-
-  await api("POST", "/api/projects", { background: { title: "新アプリ" } });
-  const created = (await api<AppList>("GET", "/api/apps")).data;
-  expect(created.length).toBe(before.length + 1);
-  const id = created.find((a) => a.title === "新アプリ")?.id ?? "";
-  expect(id).not.toBe("");
+  expect(before.some((a) => a.id === t.id)).toBe(false);
 
   await api("POST", "/api/projects", {
+    target_id: t.id,
+    background: { title: "新アプリ" },
+  });
+  const created = (await api<AppList>("GET", "/api/apps")).data;
+  expect(created.length).toBe(before.length + 1);
+  expect(created.find((a) => a.id === t.id)?.title).toBe("新アプリ");
+
+  await api("POST", "/api/projects", {
+    target_id: t.id,
     background: { title: "新アプリ改", notes: "追記" },
-    app_id: id,
   });
   const after = (await api<AppList>("GET", "/api/apps")).data;
   expect(after.length).toBe(created.length);
   const saved = await api<{ background: { title: string; notes: string } }>(
     "GET",
-    `/api/apps/${id}`,
+    `/api/apps/${t.id}`,
   );
   expect(saved.data.background.title).toBe("新アプリ改");
   expect(saved.data.background.notes).toBe("追記");
@@ -107,19 +166,19 @@ test("apps: 無い id は 404", async () => {
   expect(
     (
       await api("POST", "/api/projects", {
+        target_id: "nope",
         background: { title: "x" },
-        app_id: "nope",
       })
     ).status,
   ).toBe(404);
 });
 
-test("apps: 空文字の app_id は拒否し、id が空のアプリを作らない", async () => {
+test("apps: 空文字の target_id は 404 で、id が空のアプリを作らない", async () => {
   const before = (await api<unknown[]>("GET", "/api/apps")).data.length;
   const res = await api("POST", "/api/projects", {
+    target_id: "",
     background: { title: "x" },
-    app_id: "",
   });
-  expect(res.status).toBe(400);
+  expect(res.status).toBe(404);
   expect((await api<unknown[]>("GET", "/api/apps")).data.length).toBe(before);
 });

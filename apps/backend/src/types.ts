@@ -51,6 +51,13 @@ export type Fix = {
   new_issue_ids: string[];
   before_files: Record<string, string>; // 選び直したときに戻すための元の内容
   by?: string;
+  // 修正後のコードを再スキャンして確かめた結果 (この出来事の finding_ids の分)
+  verification?: {
+    resolved: string[];
+    remaining: string[];
+    introduced: { rule: string; title: string; file: string; line: number }[];
+    syntax: "ok" | "skipped";
+  };
 };
 
 export type AttackScenario = {
@@ -172,4 +179,13 @@ export type AppRecord = {
   id: string;
   updated_at: string;
   background: Background | null;
+};
+
+/** judgineer load で読み込んだ検査対象のフォルダ */
+export type Target = {
+  id: string;
+  path: string;
+  name: string;
+  created_at: string;
+  last_loaded_at: string;
 };
