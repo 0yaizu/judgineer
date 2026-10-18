@@ -1,4 +1,9 @@
-import { IconPlayerPlayFilled, IconSend } from "@tabler/icons-react";
+import {
+  IconArrowDown,
+  IconBulb,
+  IconPlayerPlayFilled,
+  IconSend,
+} from "@tabler/icons-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   type KeyboardEvent,
@@ -15,15 +20,7 @@ import { ErrorBox } from "#/components/ErrorBox";
 import { FixView } from "#/components/FixView";
 import { LogView } from "#/components/LogView";
 import { SkipForm } from "#/components/SkipForm";
-import { Alert, AlertTitle } from "#/components/starwind/alert";
-import { Badge } from "#/components/starwind/badge";
 import { Button } from "#/components/starwind/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "#/components/starwind/card";
 import {
   Tabs,
   TabsContent,
@@ -35,6 +32,7 @@ import { Waiting } from "#/components/Waiting";
 import { api } from "#/lib/api";
 import { chosenLabel, limitDay, MIN_PLAN } from "#/lib/judge";
 import type { ChatMessage, Issue, ProjectView } from "#/lib/types";
+import { useDetail } from "#/lib/useDetail";
 import { useProject } from "#/lib/useProject";
 
 export const Route = createFileRoute("/p/$pid/i/$iid")({
@@ -46,7 +44,16 @@ const STEPS = ["調べる", "決める", "直す", "振り返る"];
 type Tab = "code" | "infra" | "log" | "fix";
 type Busy = "" | "start" | "chat" | "hint" | "commit" | "skip";
 
-const SEVERITY_TONE = { 高: "error", 中: "warning", 低: "neutral" } as const;
+const TAB_CLASS =
+  "grow-0 rounded-none border-0 border-b-2 border-transparent px-3.5 py-2 text-sub data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none";
+const TAB_COUNT =
+  "rounded-lg bg-line-soft px-1.5 text-[11px] font-normal text-sub";
+
+const SEVERITY_CLASS = {
+  高: "border-error text-error",
+  中: "border-sub text-foreground",
+  低: "text-sub",
+} as const;
 
 function IssueRoute() {
   const { pid, iid } = Route.useParams();
@@ -69,12 +76,67 @@ function IssueRoute() {
       </div>
     );
   }
+  return <DetailGate p={p} issue={issue} onProject={setProject} />;
+}
+
+// 本文が未生成の出来事は、作ってから開く (空の本文を見せない)
+function DetailGate({
+  p,
+  issue,
+  onProject,
+}: {
+  p: ProjectView;
+  issue: Issue;
+  onProject: (p: ProjectView) => void;
+}) {
+  const { loading, error, retry } = useDetail(p, issue, onProject);
+  if (loading)
+    return (
+      <div className="grid gap-5">
+        <Crumbs
+          parent={
+            <Link
+              to="/p/$pid"
+              params={{ pid: p.id }}
+              className={crumbLinkClass}
+            >
+              {p.background.title}
+            </Link>
+          }
+          current={`${issue.day}日目の出来事`}
+        />
+        <div className="grid gap-3 rounded-r-lg border-l-4 border-error bg-warn-tint px-5 py-4">
+          <div>
+            <p className="text-xs font-bold tracking-wider text-error">
+              運用 {issue.day}日目に発生
+            </p>
+            <h1 className="mt-1 text-[22px] leading-snug font-bold">
+              {issue.incident_title}
+            </h1>
+          </div>
+          <Waiting
+            text="出来事の詳細を書いています"
+            pid={p.id}
+            iid={issue.id}
+          />
+        </div>
+      </div>
+    );
+  if (error)
+    return (
+      <div className="grid gap-4">
+        <ErrorBox message={error} />
+        <Button variant="primary" className="self-start" onClick={retry}>
+          もう一度試す
+        </Button>
+      </div>
+    );
   return (
     <IssuePage
-      key={`${pid}/${iid}`}
+      key={`${p.id}/${issue.id}`}
       p={p}
       issue={issue}
-      onProject={setProject}
+      onProject={onProject}
     />
   );
 }
@@ -92,6 +154,17 @@ function stepOf(i: Issue, busy: Busy): number {
     default:
       return i.fix ? 3 : 0;
   }
+}
+
+// 各ステップの会話が始まる位置（chat の添字）。まだ無い、または記録が無いときは null
+function stepStarts(i: Issue): (number | null)[] {
+  const fix = i.chat.findIndex((m) => m.kind === "fix");
+  return [
+    i.chat.length > 0 ? 0 : null,
+    i.decide_at ?? null,
+    fix >= 0 ? fix : null,
+    fix >= 0 ? Math.min(fix + 1, i.chat.length - 1) : null,
+  ];
 }
 
 function IssuePage({
@@ -115,6 +188,10 @@ function IssuePage({
     initial.view === "infra" ? "infra" : "code",
   );
   const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [awayFromEnd, setAwayFromEnd] = useState(false);
+  // 会話を遡って見ているステップ。最新を見ているとき（今のステップ）は null
+  const [viewing, setViewing] = useState<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // 毎回新しい配列にならないようにする（コードのスクロール位置が入力のたびに戻るため）
@@ -141,7 +218,56 @@ function IssuePage({
   const handled = !!issue.fix || !!issue.feedback;
   const ready = issue.phase === "ready" && !!issue.plan_draft && !issue.fix;
   const step = stepOf(issue, busy);
+  const starts = stepStarts(issue);
+  const shown = Math.min(viewing ?? step, step); // ハイライトするステップ
+
+  // 押したステップの会話の頭まで、会話欄の中だけをスクロールする（今のステップなら最新まで）
+  const jumpTo = (n: number) => {
+    const list = listRef.current;
+    if (!list) return;
+    const at = starts[n];
+    const el = n >= step || at == null ? null : list.children[at];
+    if (!(el instanceof HTMLElement)) {
+      list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+      return;
+    }
+    const top =
+      list.scrollTop +
+      el.getBoundingClientRect().top -
+      list.getBoundingClientRect().top -
+      16;
+    list.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  };
   const showChat = !preventer && !issue.skipped;
+
+  // 最新の発言から離れているとき「最新へ」を出し、画面の一番上にある発言がどのステップかも調べる
+  const checkEnd = () => {
+    const list = listRef.current;
+    if (!list) return;
+    const away = list.scrollHeight - list.scrollTop - list.clientHeight > 80;
+    setAwayFromEnd(away);
+    if (!away) return setViewing(null);
+    const top = list.getBoundingClientRect().top + 24;
+    let at = 0;
+    for (let k = 0; k < issue.chat.length; k++) {
+      const child = list.children[k];
+      if (child && child.getBoundingClientRect().bottom > top) {
+        at = k;
+        break;
+      }
+    }
+    let n = 0;
+    for (let k = 0; k <= Math.min(step, STEPS.length - 1); k++) {
+      const from = starts[k];
+      if (from != null && from <= at) n = k;
+    }
+    setViewing(n);
+  };
+  const jumpToEnd = () =>
+    listRef.current?.scrollTo({
+      top: listRef.current.scrollHeight,
+      behavior: "smooth",
+    });
 
   // 会話をまだ始めていなければ、最初の一言（AI を使わない）を出す
   useEffect(() => {
@@ -253,53 +379,51 @@ function IssuePage({
         current={`${issue.day}日目の出来事`}
       />
 
-      <Card className="bg-warning/10 ring-warning">
-        <CardHeader>
+      <div className="grid gap-2 rounded-r-lg border-l-4 border-error bg-warn-tint px-5 py-4">
+        <div>
           <div className="flex items-center gap-2">
-            <Badge variant="warning" size="sm">
+            <p className="text-xs font-bold tracking-wider text-error">
               運用 {issue.day}日目に発生
-            </Badge>
+            </p>
             {handled && (
-              <Badge
-                tone={SEVERITY_TONE[issue.severity]}
-                appearance="soft"
-                size="sm"
+              <span
+                className={`rounded border px-2 py-px text-xs font-medium whitespace-nowrap ${SEVERITY_CLASS[issue.severity]}`}
               >
                 影響 {issue.severity}
-              </Badge>
+              </span>
             )}
           </div>
-          <CardTitle className="text-xl leading-snug">
+          <h1 className="mt-1 text-[22px] leading-snug font-bold">
             {issue.incident_title}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-2">
-          <p className="max-w-4xl">{issue.incident_story}</p>
-          {cause && (
-            <p className="text-sm font-medium text-error">
-              この出来事は、{cause.day}日目にあなたが入れた修正「
-              {chosenLabel(cause)}」がきっかけで起きています。
-            </p>
-          )}
-          {origin && (
-            <p className="text-sm font-medium text-error">
-              {origin.day}日目に「{origin.skipped?.reason}
-              」という理由で見送った出来事の原因が、直されないまま残っていました。
-            </p>
-          )}
-          {changer && issue.changed_by && (
-            <p className="text-sm font-medium text-error">
-              {changer.day}日目の修正で、影響が
-              {issue.changed_by.effect === "reduced" ? "小さく" : "大きく"}
-              なっています：{issue.changed_by.reason}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          </h1>
+        </div>
+        <p className="max-w-[48em]">{issue.incident_story}</p>
+        {cause && (
+          <p className="text-sm font-medium text-error">
+            この出来事は、{cause.day}日目にあなたが入れた修正「
+            {chosenLabel(cause)}」がきっかけで起きています。
+          </p>
+        )}
+        {origin && (
+          <p className="text-sm font-medium text-error">
+            {origin.day}日目に「{origin.skipped?.reason}
+            」という理由で見送った出来事の原因が、直されないまま残っていました。
+          </p>
+        )}
+        {changer && issue.changed_by && (
+          <p className="text-sm font-medium text-error">
+            {changer.day}日目の修正で、影響が
+            {issue.changed_by.effect === "reduced" ? "小さく" : "大きく"}
+            なっています：{issue.changed_by.reason}
+          </p>
+        )}
+      </div>
 
       {preventer && (
-        <Alert variant="info">
-          <AlertTitle>この出来事は起きませんでした</AlertTitle>
+        <div className="rounded-[10px] border-2 border-primary bg-tint px-5 py-4">
+          <h2 className="mb-2 text-[19px] font-bold text-primary-accent">
+            この出来事は起きませんでした
+          </h2>
           <div className="grid gap-3">
             <p>
               {preventer.day}日目の修正「{chosenLabel(preventer)}
@@ -309,12 +433,14 @@ function IssuePage({
               運用に戻る <IconPlayerPlayFilled />
             </Button>
           </div>
-        </Alert>
+        </div>
       )}
 
       {issue.skipped && (
-        <Alert>
-          <AlertTitle>この出来事は、今回は対応しないことにしました</AlertTitle>
+        <div className="rounded-[10px] border-2 border-dashed border-muted-foreground bg-muted px-5 py-4">
+          <h2 className="mb-2 text-[19px] font-bold">
+            この出来事は、今回は対応しないことにしました
+          </h2>
           <div className="grid gap-3">
             <p>見送った理由：{issue.skipped.reason}</p>
             <p>
@@ -350,7 +476,7 @@ function IssuePage({
               )}
             </div>
           </div>
-        </Alert>
+        </div>
       )}
 
       <div
@@ -358,21 +484,23 @@ function IssuePage({
       >
         <section className="grid min-w-0 gap-4" aria-label="根拠">
           <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-            <TabsList>
-              <TabsTrigger value="code">
+            <TabsList className="w-full justify-start gap-1 rounded-none border-b bg-transparent p-0">
+              <TabsTrigger value="code" className={TAB_CLASS}>
                 コード
-                <Badge variant="ghost" size="sm">
-                  {evidence.length}
-                </Badge>
+                <span className={TAB_COUNT}>{evidence.length}</span>
               </TabsTrigger>
-              <TabsTrigger value="infra">構成図</TabsTrigger>
-              <TabsTrigger value="log">
+              <TabsTrigger value="infra" className={TAB_CLASS}>
+                構成図
+              </TabsTrigger>
+              <TabsTrigger value="log" className={TAB_CLASS}>
                 その日のログ
-                <Badge variant="ghost" size="sm">
-                  {issue.signals.length}
-                </Badge>
+                <span className={TAB_COUNT}>{issue.signals.length}</span>
               </TabsTrigger>
-              {issue.fix && <TabsTrigger value="fix">修正の結果</TabsTrigger>}
+              {issue.fix && (
+                <TabsTrigger value="fix" className={TAB_CLASS}>
+                  修正の結果
+                </TabsTrigger>
+              )}
             </TabsList>
             <TabsContent value="code" className="pt-3">
               {evidence.length > 0 ? (
@@ -450,54 +578,92 @@ function IssuePage({
             className="flex flex-col overflow-hidden rounded-xl border bg-background lg:sticky lg:top-20 lg:h-[calc(100vh-6.5rem)] lg:min-h-[32rem]"
           >
             <ol
-              className="flex gap-1.5 border-b p-3 text-xs"
+              className="relative flex gap-1.5 border-b p-3 text-xs"
               aria-label="進み具合"
             >
-              {STEPS.map((s, n) => (
-                <li
-                  key={s}
-                  className={`flex-1 rounded-full py-1 text-center ${
-                    n === step
-                      ? "bg-primary font-medium text-primary-foreground"
-                      : n < step
-                        ? "bg-primary/10 text-primary"
-                        : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {s}
-                </li>
-              ))}
+              {/* 今見ているステップの色（緑の丸）。ステップが変わると横になめらかに動く */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute top-3 bottom-3 left-3 rounded-full bg-primary transition-[transform,opacity] duration-500 ease-in-out"
+                style={{
+                  width: "calc((100% - 1.5rem - 1.125rem) / 4)",
+                  transform: `translateX(calc(${shown} * (100% + 0.375rem)))`,
+                  opacity: shown < STEPS.length ? 1 : 0,
+                }}
+              />
+              {STEPS.map((s, n) => {
+                const canJump = n <= step && (n === step || starts[n] != null);
+                return (
+                  <li key={s} className="relative z-10 flex-1">
+                    <button
+                      type="button"
+                      disabled={!canJump}
+                      onClick={() => jumpTo(n)}
+                      aria-current={n === step ? "step" : undefined}
+                      title={
+                        canJump && n < step
+                          ? `「${s}」の会話まで戻る`
+                          : undefined
+                      }
+                      className={`w-full rounded-full py-1 text-center transition-colors duration-500 ease-in-out disabled:cursor-default ${
+                        n === shown
+                          ? "font-medium text-primary-foreground"
+                          : n <= step
+                            ? "bg-primary/10 text-primary hover:bg-primary/20 disabled:hover:bg-primary/10"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  </li>
+                );
+              })}
             </ol>
 
-            <div
-              className="flex min-h-64 flex-1 flex-col gap-3 overflow-y-auto bg-muted/30 p-4"
-              aria-live="polite"
-            >
-              {issue.chat.map((m, n) => (
-                <Bubble
-                  // biome-ignore lint/suspicious/noArrayIndexKey: 発言は後ろに足すだけで並び替えない
-                  key={n}
-                  m={m}
-                  onShowFix={() => setTab("fix")}
-                />
-              ))}
-              {(busy === "chat" || busy === "hint" || busy === "start") && (
-                <Typing />
+            <div className="relative flex min-h-64 flex-1 flex-col overflow-hidden">
+              <div
+                ref={listRef}
+                onScroll={checkEnd}
+                className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-muted/30 p-4"
+                aria-live="polite"
+              >
+                {issue.chat.map((m, n) => (
+                  <Bubble
+                    // biome-ignore lint/suspicious/noArrayIndexKey: 発言は後ろに足すだけで並び替えない
+                    key={n}
+                    m={m}
+                    onShowFix={() => setTab("fix")}
+                  />
+                ))}
+                {(busy === "chat" || busy === "hint" || busy === "start") && (
+                  <Typing />
+                )}
+                {busy === "commit" && (
+                  <div className="rounded-lg border bg-background p-3">
+                    <Waiting text="決めた方針をコードと構成に反映して、この先の運用への影響を計算しています（20〜40秒）" />
+                  </div>
+                )}
+                {issue.lesson && issue.phase === "done" && (
+                  <div className="rounded-lg border border-dashed border-primary bg-background p-3">
+                    <span className="text-xs font-bold text-muted-foreground">
+                      判断の記録に残したメモ
+                    </span>
+                    <p className="text-sm">{issue.lesson}</p>
+                  </div>
+                )}
+                <div ref={endRef} />
+              </div>
+              {awayFromEnd && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full shadow-md"
+                  onClick={jumpToEnd}
+                >
+                  <IconArrowDown />
+                  最新へ
+                </Button>
               )}
-              {busy === "commit" && (
-                <div className="rounded-lg border bg-background p-3">
-                  <Waiting text="決めた方針をコードと構成に反映して、この先の運用への影響を計算しています（20〜40秒）" />
-                </div>
-              )}
-              {issue.lesson && issue.phase === "done" && (
-                <div className="rounded-lg border border-dashed border-primary bg-background p-3">
-                  <span className="text-xs font-bold text-muted-foreground">
-                    判断の記録に残したメモ
-                  </span>
-                  <p className="text-sm">{issue.lesson}</p>
-                </div>
-              )}
-              <div ref={endRef} />
             </div>
 
             <div className="grid gap-2 border-t p-3">
@@ -580,11 +746,13 @@ function IssuePage({
                   <div className="flex flex-wrap items-start gap-2">
                     {issue.phase !== "done" && (
                       <Button
-                        variant="ghost"
+                        variant="success"
                         size="sm"
+                        className="border border-primary/40"
                         disabled={!!busy}
                         onClick={() => send(true)}
                       >
+                        <IconBulb />
                         ヒントをもらう
                       </Button>
                     )}

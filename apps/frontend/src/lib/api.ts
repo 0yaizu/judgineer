@@ -2,6 +2,8 @@ import type { AppType } from "@tka/backend/app";
 import { hc } from "hono/client";
 import type {
   AIConfig,
+  AppRecord,
+  AppSummary,
   Background,
   Issue,
   Lesson,
@@ -26,7 +28,7 @@ async function read<T>(res: Promise<Res>): Promise<T> {
     r = await res;
   } catch {
     throw new Disconnected(
-      "バックエンドに接続できません。bun run dev が動いているか確認してください",
+      "バックエンドに接続できません。judgineer start（開発時は bun run dev）で起動しているか確認してください",
     );
   }
   let body: unknown;
@@ -36,7 +38,7 @@ async function read<T>(res: Promise<Res>): Promise<T> {
     // 本文が読めない: proxy がバックエンドにつながらなかった（502〜504）か、途中で接続が切れた
     if (r.ok || (r.status >= 502 && r.status <= 504)) {
       throw new Disconnected(
-        "バックエンド（127.0.0.1:3001）との接続が切れました。バックエンドが起動しているか確認してください",
+        "バックエンドとの接続が切れました。judgineer start（開発時は bun run dev）で起動しているか確認してください",
       );
     }
     throw new Error(`エラーが発生しました（${r.status}）`);
@@ -86,16 +88,23 @@ const ip = (pid: string, iid: string) => ({ param: { pid, iid } });
 
 export const api = {
   config: () => read<AIConfig>(client.config.$get()),
-  target: () => read<Target>(client.target.$get()),
+  targets: () => read<Target[]>(client.targets.$get()),
+  removeTarget: (id: string) =>
+    read<{ ok: true }>(client.targets[":id"].$delete({ param: { id } })),
   lessons: () => read<Lesson[]>(client.lessons.$get()),
+  apps: () => read<AppSummary[]>(client.apps.$get()),
+  app: (id: string) =>
+    read<AppRecord>(client.apps[":id"].$get({ param: { id } })),
   projects: () => read<ProjectSummary[]>(client.projects.$get()),
   project: (pid: string) =>
     read<ProjectView>(projectApi.$get({ param: { pid } })),
-  createProject: (background: Background) =>
-    post<ProjectView>(client.projects.$url(), { background }),
+  createProject: (target_id: string, background: Background) =>
+    post<ProjectView>(client.projects.$url(), { target_id, background }),
   analyze,
   progress: (pid: string) =>
     read<Progress>(projectApi.progress.$get({ param: { pid } })),
+  issueProgress: (pid: string, iid: string) =>
+    read<Progress>(issueApi.progress.$get(ip(pid, iid))),
   setSimDay: (pid: string, day: number) =>
     post<{ sim_day: number; limit: number }>(
       projectApi.sim.$url({ param: { pid } }),
@@ -106,6 +115,8 @@ export const api = {
     url.search = new URLSearchParams({ path, version }).toString();
     return read<{ path: string; content: string }>(fetch(url));
   },
+  detail: (pid: string, iid: string) =>
+    read<Issue>(issueApi.detail.$post(ip(pid, iid))),
   chatStart: (pid: string, iid: string) =>
     read<Issue>(issueApi.chat.start.$post(ip(pid, iid))),
   chat: (pid: string, iid: string, text: string, hint = false) =>

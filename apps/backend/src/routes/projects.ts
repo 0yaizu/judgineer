@@ -1,12 +1,13 @@
-import { cpSync, existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { type Background, backgroundSchema, SIM_DAYS } from "@tka/shared";
 import { Hono } from "hono";
 import { z } from "zod";
-import { analyze, getProgress } from "../analyze";
+import { analyze } from "../analyze";
 import { settled } from "../clean";
-import { config, REPO_ROOT } from "../config";
 import { HttpError, readBody } from "../http";
+import { getProgress } from "../progress";
 import {
+  createProject,
   currentDir,
   inside,
   isFile,
@@ -15,18 +16,22 @@ import {
   srcDir,
 } from "../project";
 import * as repo from "../repo";
-import { extractFeatures, scan, snapshotTarget } from "../scanner";
-import type { Project } from "../types";
+import { isDir } from "../targets";
 
 const BG_KEYS = Object.keys(backgroundSchema.shape) as (keyof Background)[];
 
 export default new Hono()
   .get("/", (c) => c.json(repo.listProjects()))
   .post("/", async (c) => {
-    const { background } = await readBody(
+    const { target_id, background } = await readBody(
       c,
-      z.object({ background: z.record(z.string(), z.unknown()) }),
+      z.object({
+        target_id: z.string(),
+        background: z.record(z.string(), z.unknown()),
+      }),
     );
+    const target = repo.getTarget(target_id);
+    if (!target) throw new HttpError(404, "検査するフォルダが見つかりません");
     const bg = Object.fromEntries(
       BG_KEYS.map((k) => {
         const v = background[k];
@@ -34,34 +39,15 @@ export default new Hono()
       }),
     ) as Background;
     if (!bg.title) throw new HttpError(400, "アプリ名を入力してください");
-    if (
-      !existsSync(config.targetDir) ||
-      !statSync(config.targetDir).isDirectory()
-    )
-      throw new HttpError(500, "検査対象のフォルダが見つかりません");
+    if (!isDir(target.path))
+      throw new HttpError(
+        400,
+        `検査対象のフォルダが見つかりません: ${target.path}`,
+      );
 
-    const id = repo.newId();
-    const src = srcDir(id);
-    // dataDir が検査対象の中にあっても、コピーが自分自身を取り込まないようにする
-    snapshotTarget(config.targetDir, src, [REPO_ROOT, config.dataDir]);
-    cpSync(src, currentDir(id), { recursive: true });
-    const project: Project = {
-      id,
-      created_at: repo.now(),
-      background: bg,
-      source: "target",
-      findings: scan(src),
-      features: extractFeatures(src),
-      issues: [],
-      architecture: { nodes: [], edges: [] },
-      flows: [],
-      dismissed: [],
-      uncovered_features: [],
-      assumed_users: null,
-      sim_day: 0,
-      analyzed_by: null,
-    };
-    repo.saveProject(project);
+    const project = createProject(bg, target.path);
+    // 登録したアプリとして、フォルダと同じ行に背景を残す
+    repo.saveApp(bg, target.id);
     return c.json(project);
   })
   .get("/:pid", (c) => c.json(projectPayload(loadProject(c.req.param("pid")))))

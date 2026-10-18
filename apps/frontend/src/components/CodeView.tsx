@@ -1,6 +1,6 @@
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Badge } from "#/components/starwind/badge";
+import { PathBar } from "#/components/PathBar";
 import { api } from "#/lib/api";
 import type { Finding } from "#/lib/types";
 
@@ -45,29 +45,31 @@ export function CodeView({
     hits.set(f.line, [...(hits.get(f.line) ?? []), f]);
 
   return (
-    <div className="overflow-hidden rounded-lg border">
-      <div className="flex flex-wrap items-center gap-1 border-b bg-muted/50 px-2 py-1 font-mono text-xs">
+    <div className="overflow-hidden rounded-lg bg-[#161b22] dark:bg-[#0b0f12] dark:ring-1 dark:ring-border">
+      <div className="flex flex-wrap bg-[#0d1117]">
         {files.map((f) => (
           <button
             key={f}
             type="button"
             onClick={() => setFile(f)}
-            className={`flex items-center gap-1.5 rounded px-2 py-1 ${f === file ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            title={f}
+            className={`px-3.5 py-2 font-mono text-[12.5px] ${f === file ? "border-t-2 border-[#f2cc60] bg-[#161b22] text-[#e6edf3]" : "border-t-2 border-transparent text-[#8b949e] hover:text-[#e6edf3]"}`}
           >
-            {f}
-            <Badge variant="error" size="sm">
+            {f.split("/").pop()}
+            <span className="ml-2 rounded-lg bg-[#ff9b85] px-1.5 text-[11px] text-[#161b22]">
               {findings.filter((x) => x.file === f).length}
-            </Badge>
+            </span>
           </button>
         ))}
       </div>
+      <PathBar file={file} />
       {error && <p className="p-3 text-sm text-error">{error}</p>}
       <section
         ref={bodyRef}
         aria-label="コード"
         // biome-ignore lint/a11y/noNoninteractiveTabindex: キーボードだけでもスクロールできるようにする
         tabIndex={0}
-        className="relative max-h-96 overflow-auto py-2 font-mono text-xs leading-6"
+        className="relative max-h-[420px] overflow-auto py-2 font-mono text-[12.5px] leading-[1.65] text-[#c9d1d9]"
       >
         {text === undefined && !error && (
           <p className="px-4 text-muted-foreground">読み込み中…</p>
@@ -79,30 +81,30 @@ export function CodeView({
             <Fragment key={no}>
               <div
                 data-hit={hit ? "" : undefined}
-                className={`grid grid-cols-[3rem_1fr] ${hit ? "bg-error/10" : ""}`}
+                className={`grid grid-cols-[52px_1fr] ${hit ? "bg-[#ff9b85]/15 shadow-[inset_3px_0_0_#ff9b85]" : ""}`}
               >
-                <span className="select-none pr-3 text-right text-muted-foreground">
+                <span
+                  className={`select-none pr-3.5 text-right ${hit ? "text-[#ff9b85]" : "text-[#6e7681]"}`}
+                >
                   {no}
                 </span>
-                <span className="whitespace-pre">{line || " "}</span>
+                <span className="whitespace-pre pr-4">{line || " "}</span>
               </div>
               {hit && hideLabels && (
-                <div className="flex flex-wrap items-center gap-x-3 border-l-2 border-error bg-error/5 py-1 pr-3 pl-14 text-error">
+                <div className="mt-0.5 mr-4 mb-1.5 ml-[52px] flex flex-wrap items-center gap-x-2.5 rounded bg-[#2d1f1b] px-2.5 py-1 font-sans text-[12.5px] text-[#ffb8a6]">
                   <IconAlertTriangle className="size-3.5" />
-                  <span className="font-sans text-sm">
-                    機械的なチェックが、この行を気にしています
-                  </span>
+                  <span>機械的なチェックが、この行を気にしています</span>
                 </div>
               )}
               {!hideLabels &&
                 hit?.map((f) => (
                   <div
                     key={f.id}
-                    className="flex flex-wrap items-center gap-x-3 border-l-2 border-error bg-error/5 py-1 pr-3 pl-14 text-error"
+                    className="mt-0.5 mr-4 mb-1.5 ml-[52px] flex flex-wrap items-center gap-x-2.5 rounded bg-[#2d1f1b] px-2.5 py-1 font-sans text-[12.5px] text-[#ffb8a6]"
                   >
                     <IconAlertTriangle className="size-3.5" />
-                    <span className="font-sans text-sm">{f.title}</span>
-                    <span className="text-muted-foreground">
+                    <span>{f.title}</span>
+                    <span className="text-[11.5px] text-[#8b949e]">
                       検出ルール: {f.rule}
                     </span>
                   </div>

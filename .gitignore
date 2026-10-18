@@ -18,4 +18,8 @@ dist-ssr
 # 実行時データ（検査対象のコピーなど）
 data/
 
+# 測定・引き継ぎ用のローカル成果物
+handoff/
+
 apps/frontend/src/components/starwind
+dist-bin

@@ -11,6 +11,7 @@ import {
   installFakeAI,
   type Payload,
   setup,
+  TARGET,
 } from "./helpers/fake-ai";
 
 installFakeAI();
@@ -36,8 +37,10 @@ test("会話 → 方針の確定 → 反映 → 振り返り → メモ", async 
 
   i = (await chat(p, iid, { text: "デバッグ画面が外から見えている" })).data;
   const n = i.chat.length;
+  expect(i.decide_at).toBeUndefined();
   i = (await chat(p, iid, { text: "B社が困る" })).data;
   expect(i.phase).toBe("decide");
+  expect(i.decide_at).toBe(n + 1); // 発言のすぐ後ろ = AI の最初の返事
   expect(i.chat.length).toBe(n + 1 + 3); // 発言 + AI の発言は3件まで
   expect(i.chat.some((m) => m.role === "stakeholder")).toBe(true);
 
@@ -82,7 +85,7 @@ test("会話 → 方針の確定 → 反映 → 振り返り → メモ", async 
     ),
   ).toBe(srcBefore);
   expect(readFileSync(outside, "utf8")).toBe("orig");
-  expect(readFileSync(join(config.targetDir, "app.py"), "utf8")).toBe(appPy);
+  expect(readFileSync(join(TARGET, "app.py"), "utf8")).toBe(appPy);
 
   // 反映後も、未対応の出来事(副作用の I3)より先へは進めない
   const sim = await api<{ sim_day: number; limit: number }>(

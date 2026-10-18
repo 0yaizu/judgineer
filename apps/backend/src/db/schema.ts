@@ -34,6 +34,18 @@ export const projects = sqliteTable("projects", {
   analyzedBy: text("analyzed_by"),
 });
 
+// 登録したアプリ。projects は登録のたびに増える実行記録で、apps はフォルダと背景を持つ
+export const apps = sqliteTable("apps", {
+  id: text("id").primaryKey(),
+  // judgineer load で読み込んだフォルダ。登録画面から作った古いアプリには無い
+  path: text("path").unique(),
+  name: text("name").notNull(),
+  // 登録 (背景の入力) の前は null
+  background: text("background", { mode: "json" }).$type<Background>(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const issues = sqliteTable(
   "issues",
   {

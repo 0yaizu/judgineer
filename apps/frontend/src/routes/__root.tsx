@@ -7,6 +7,8 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
+import { Logo } from "#/components/Logo";
+import { ThemeToggle } from "#/components/ThemeToggle";
 import { api } from "#/lib/api";
 import type { AIConfig } from "#/lib/types";
 import appCss from "../styles.css?url";
@@ -29,6 +31,17 @@ export const Route = createRootRoute({
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      // 見出し用の太いゴシック（--font-display）
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      {
+        rel: "preconnect",
+        href: "https://fonts.gstatic.com",
+        crossOrigin: "anonymous",
+      },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@800&display=swap",
       },
     ],
   }),
@@ -55,8 +68,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 }
 
 const NAV = [
-  { to: "/", label: "アプリを登録" },
+  { to: "/sessions", label: "セッション履歴" },
   { to: "/lessons", label: "判断の記録" },
+  { to: "/register", label: "アプリを登録" },
 ] as const;
 
 function AppHeader() {
@@ -69,11 +83,15 @@ function AppHeader() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4 sm:px-6">
-        <Link to="/" className="font-bold">
+    <header className="sticky top-0 z-10 border-b bg-background">
+      <div className="mx-auto flex h-14 max-w-6xl items-center gap-7 px-4 sm:px-6">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 font-display text-[17px] font-extrabold text-foreground hover:text-foreground"
+        >
+          <Logo className="size-7 text-ink" />
           ジャッジニア
-          <span className="ml-2 text-xs font-normal text-muted-foreground">
+          <span className="text-xs font-medium tracking-wider text-muted-foreground">
             Judgineer
           </span>
         </Link>
@@ -83,22 +101,26 @@ function AppHeader() {
               key={n.to}
               to={n.to}
               activeOptions={{ exact: true }}
-              className="border-b-2 border-transparent py-4 text-muted-foreground hover:text-foreground"
+              className="border-b-2 py-4 hover:text-foreground"
               activeProps={{ className: "border-primary text-foreground" }}
+              inactiveProps={{ className: "border-transparent text-sub" }}
             >
               {n.label}
             </Link>
           ))}
         </nav>
-        {ai && (
-          <span
-            title={ai.status.detail}
-            className={`ml-auto rounded-full border px-3 py-0.5 text-xs ${ai.status.ok ? "text-muted-foreground" : "border-error text-error"}`}
-          >
-            AI: {ai.label}
-            {!ai.status.ok && "（要確認）"}
-          </span>
-        )}
+        <div className="ml-auto flex items-center gap-3">
+          {ai && (
+            <span
+              title={ai.status.detail}
+              className={`rounded-full border px-3 py-0.5 text-xs ${ai.status.ok ? "text-muted-foreground" : "border-error text-error"}`}
+            >
+              AI: {ai.label}
+              {!ai.status.ok && "（要確認）"}
+            </span>
+          )}
+          <ThemeToggle />
+        </div>
       </div>
       {ai && !ai.status.ok && (
         <p className="bg-error/10 px-4 py-2 text-center text-sm text-error">

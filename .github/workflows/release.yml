@@ -17,19 +17,20 @@ jobs:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile
 
-      - name: frontend をビルドして固める
-        run: |
-          bun run build
-          tar -czf tka-frontend.tar.gz -C apps/frontend/dist/client .
+      - name: frontend をビルドする
+        run: bun run build
 
-      - name: backend を OS ごとの単体バイナリにする
-        run: |
-          for target in linux-x64 darwin-arm64 darwin-x64; do
-            bun build --compile --target=bun-$target apps/backend/src/index.ts --outfile tka-backend-$target
-          done
+      # フロントとマイグレーションを埋め込んだ単体バイナリを、OS ごとに作る
+      - name: judgineer を OS ごとの単体バイナリにする
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: bun scripts/build-binary.ts --version "$TAG"
 
       - name: リリースに添付する
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" tka-frontend.tar.gz tka-backend-* --clobber
+        working-directory: dist-bin
+        run: |
+          sha256sum judgineer-* > SHA256SUMS
+          gh release upload "$TAG" judgineer-* SHA256SUMS --clobber

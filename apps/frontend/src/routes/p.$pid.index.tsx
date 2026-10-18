@@ -1,6 +1,11 @@
+import {
+  IconChevronDown,
+  IconPlayerPauseFilled,
+  IconPlayerPlayFilled,
+} from "@tabler/icons-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { SIM_DAYS } from "@tka/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArchDiagram } from "#/components/ArchDiagram";
 import { Crumbs, crumbLinkClass } from "#/components/Crumbs";
 import { ErrorBox } from "#/components/ErrorBox";
@@ -13,14 +18,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "#/components/starwind/accordion";
-import { Badge } from "#/components/starwind/badge";
 import { Button, ButtonVariants } from "#/components/starwind/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "#/components/starwind/card";
 import { Spinner } from "#/components/starwind/spinner";
 import { Waiting } from "#/components/Waiting";
 import { api } from "#/lib/api";
@@ -32,6 +30,7 @@ import {
   limitDay,
 } from "#/lib/judge";
 import type { Issue, ProjectView as Project } from "#/lib/types";
+import { useDetail } from "#/lib/useDetail";
 import { useProject } from "#/lib/useProject";
 
 const setSimDay = (pid: string, day: number) =>
@@ -86,6 +85,15 @@ function normalLog(
   };
 }
 
+const signalLogs = (i: Issue): LogLine[] =>
+  i.signals.map((s, n) => ({
+    key: `s${i.id}${n}${seq++}`,
+    time: `${i.day}日目 ${s.time}`,
+    source: s.source,
+    level: s.level,
+    text: s.text,
+  }));
+
 function incidentLogs(i: Issue): LogLine[] {
   return [
     {
@@ -95,13 +103,7 @@ function incidentLogs(i: Issue): LogLine[] {
       level: "error",
       text: `出来事が発生：${i.incident_title}`,
     },
-    ...i.signals.map((s, n) => ({
-      key: `s${i.id}${n}${seq++}`,
-      time: `${i.day}日目 ${s.time}`,
-      source: s.source,
-      level: s.level,
-      text: s.text,
-    })),
+    ...signalLogs(i),
   ];
 }
 
@@ -161,6 +163,7 @@ function Simulation({
   );
   const [liveEdges, setLiveEdges] = useState<number[]>([]);
   const [error, setError] = useState("");
+  const [seekbarOpen, setSeekbarOpen] = useState(true);
   const dayRef = useRef(Math.min(p.sim_day, limit));
   const errorTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -253,6 +256,27 @@ function Simulation({
     }
   };
 
+  // スペースキーで再生・一時停止する。文字を打つ欄やボタンにフォーカスがあるときは、その操作を優先する
+  const toggleRef = useRef(toggle);
+  toggleRef.current = toggle;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.repeat) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      const el = e.target as HTMLElement | null;
+      if (
+        el?.closest(
+          "input, textarea, select, button, a, [contenteditable], [role=slider]",
+        )
+      )
+        return;
+      e.preventDefault();
+      toggleRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const markers: Marker[] = reached.map((i) => ({
     day: i.day,
     state: issueState(i),
@@ -293,6 +317,17 @@ function Simulation({
   };
 
   const atIncident = current && !isSettled(current);
+  const currentId = current?.id;
+  // 出来事のログは本文が無いまま先に出ているので、本文が届いたら signals を足す
+  const onDetail = useCallback(
+    (np: Project) => {
+      onChange(np);
+      const d = np.issues.find((i) => i.id === currentId);
+      if (d) setLogs((l) => appendLog(l, ...signalLogs(d)));
+    },
+    [onChange, currentId],
+  );
+  const detail = useDetail(p, atIncident ? current : undefined, onDetail);
   const origin = current?.escalated_from
     ? issues.find((i) => i.id === current.escalated_from)
     : undefined;
@@ -319,13 +354,15 @@ function Simulation({
         />
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">{p.background.title}</h1>
+            <h1 className="mt-1.5 mb-0.5 text-[26px] leading-snug font-bold">
+              {p.background.title}
+            </h1>
             <p className="text-sm text-muted-foreground">
               公開から{SIM_DAYS}
               日間の運用を再生します。問題は、その日になるまで見えません。
             </p>
           </div>
-          <dl className="flex gap-3">
+          <dl className="flex gap-7">
             <Stat label="運用" value={today} unit="日目" />
             <Stat label="起きた出来事" value={reached.length} />
             <Stat label="対応済み" value={done} />
@@ -337,24 +374,24 @@ function Simulation({
       <ErrorBox message={error} />
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <Card>
-          <CardHeader className="flex items-center justify-between">
-            <CardTitle>システム構成</CardTitle>
-            <Badge variant={atIncident ? "error" : "ghost"} size="sm">
+        <section className="grid gap-3 rounded-[10px] border bg-card px-[18px] pt-4 pb-[18px]">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[15px] font-bold text-sub">システム構成</h2>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs ${atIncident ? "bg-warn-tint font-medium text-error" : "bg-tint text-primary-accent"}`}
+            >
               {playing && <Spinner className="size-3" />}
               {atIncident ? "異常あり" : playing ? "稼働中" : "停止中"}
-            </Badge>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <ArchDiagram
-              compact
-              arch={p.architecture}
-              affected={atIncident ? current.affected_nodes : []}
-              liveEdges={playing ? liveEdges : []}
-            />
-            <LogView title="運用ログ" lines={logs} height={200} />
-          </CardContent>
-        </Card>
+            </span>
+          </div>
+          <ArchDiagram
+            compact
+            arch={p.architecture}
+            affected={atIncident ? current.affected_nodes : []}
+            liveEdges={playing ? liveEdges : []}
+          />
+          <LogView title="運用ログ" lines={logs} height={200} />
+        </section>
 
         <aside className="grid gap-4">
           {noScript ? (
@@ -371,43 +408,60 @@ function Simulation({
               )}
             </CalmCard>
           ) : atIncident ? (
-            <Card className="ring-error">
-              <CardHeader>
-                <Badge variant="error" size="sm" className="justify-self-start">
+            <div className="grid animate-in gap-3 rounded-[10px] border-2 border-error bg-warn-tint px-[18px] py-4 text-sm fade-in slide-in-from-bottom-1">
+              <div>
+                <p className="text-xs font-bold tracking-wider text-error">
                   {current.day}日目に発生
-                </Badge>
-                <CardTitle className="leading-snug">
-                  {current.incident_title}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-3 text-sm">
-                <p>{current.incident_story}</p>
-                {origin && (
-                  <p className="rounded-md bg-muted p-2">
-                    {origin.day}
-                    日目に見送った出来事の原因が、そのまま残っていました。
-                  </p>
-                )}
-                <p className="text-muted-foreground">
-                  対応するか、今回は見送るかを決めるまで、運用は先に進みません。
                 </p>
-                <Button
-                  variant="primary"
-                  onClick={() =>
-                    navigate({
-                      to: "/p/$pid/i/$iid",
-                      params: { pid, iid: current.id },
-                    })
-                  }
-                >
-                  原因を調べて対応する
-                </Button>
-                <SkipForm
-                  openLabel="今回は対応しない"
-                  onSkip={(reason) => skip(current, reason)}
+                <h2 className="mt-1 text-[17px] leading-relaxed font-bold">
+                  {current.incident_title}
+                </h2>
+              </div>
+              {detail.loading ? (
+                <Waiting
+                  text="出来事の詳細を書いています"
+                  pid={pid}
+                  iid={current.id}
                 />
-              </CardContent>
-            </Card>
+              ) : detail.error ? (
+                <>
+                  <ErrorBox message={detail.error} />
+                  <Button
+                    variant="secondary"
+                    className="justify-self-start"
+                    onClick={detail.retry}
+                  >
+                    もう一度試す
+                  </Button>
+                </>
+              ) : (
+                <p>{current.incident_story}</p>
+              )}
+              {origin && (
+                <p className="rounded-md bg-background/70 p-2">
+                  {origin.day}
+                  日目に見送った出来事の原因が、そのまま残っていました。
+                </p>
+              )}
+              <p className="text-muted-foreground">
+                対応するか、今回は見送るかを決めるまで、運用は先に進みません。
+              </p>
+              <Button
+                variant="primary"
+                onClick={() =>
+                  navigate({
+                    to: "/p/$pid/i/$iid",
+                    params: { pid, iid: current.id },
+                  })
+                }
+              >
+                原因を調べて対応する
+              </Button>
+              <SkipForm
+                openLabel="今回は対応しない"
+                onSkip={(reason) => skip(current, reason)}
+              />
+            </div>
           ) : current?.prevented_by ? (
             <CalmCard
               badge={`${current.day}日目・修正で回避`}
@@ -493,64 +547,60 @@ function Simulation({
           )}
 
           {reached.length > 0 && (
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle>これまでの出来事</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ol className="divide-y">
-                  {reached.map((i) => (
-                    <li
-                      key={i.id}
-                      className="flex items-center justify-between gap-2 py-2 text-sm"
+            <div>
+              <h3 className="mb-1.5 text-[13px] font-bold text-sub">
+                これまでの出来事
+              </h3>
+              <ol className="divide-y divide-line-soft border-y border-line-soft">
+                {reached.map((i) => (
+                  <li
+                    key={i.id}
+                    className="flex items-start justify-between gap-2.5 py-2"
+                  >
+                    <Link
+                      to="/p/$pid/i/$iid"
+                      params={{ pid, iid: i.id }}
+                      className="flex min-w-0 flex-col text-[13px] leading-normal text-foreground hover:text-foreground hover:underline"
                     >
-                      <Link
-                        to="/p/$pid/i/$iid"
-                        params={{ pid, iid: i.id }}
-                        className="min-w-0 hover:underline"
-                      >
-                        <span className="mr-2 text-muted-foreground">
-                          {i.day}日目
-                        </span>
-                        {i.incident_title}
-                      </Link>
-                      <StatusBadge i={i} />
-                    </li>
-                  ))}
-                </ol>
-              </CardContent>
-            </Card>
+                      <span className="text-xs text-muted-foreground">
+                        {i.day}日目
+                      </span>
+                      {i.incident_title}
+                    </Link>
+                    <StatusBadge i={i} />
+                  </li>
+                ))}
+              </ol>
+            </div>
           )}
 
           {related.length > 0 && (
-            <Card size="sm" className="bg-primary/5">
-              <CardHeader>
-                <CardTitle>前に作ったアプリでのメモ</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="grid gap-2 text-sm">
-                  {related.map((l) => (
-                    <li key={l.id}>
-                      <span className="text-xs text-muted-foreground">
-                        {l.project_title}
-                      </span>
-                      <p>
-                        {l.lesson ||
-                          (l.chosen.startsWith("今回は対応しない")
-                            ? `見送った（${l.reason}）`
-                            : `「${l.chosen}」を選んだ`)}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
+            <div className="rounded-md bg-tint px-5 py-4">
+              <h3 className="mb-1.5 text-[13px] font-bold text-sub">
+                前に作ったアプリでのメモ
+              </h3>
+              <ul className="grid gap-2 text-sm">
+                {related.map((l) => (
+                  <li key={l.id}>
+                    <span className="text-xs text-muted-foreground">
+                      {l.project_title}
+                    </span>
+                    <p>
+                      {l.lesson ||
+                        (l.chosen.startsWith("今回は対応しない")
+                          ? `見送った（${l.reason}）`
+                          : `「${l.chosen}」を選んだ`)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           <Accordion
             type="single"
             collapsible
-            className="rounded-xl border px-4"
+            className="rounded-md border px-4"
           >
             <AccordionItem value="bg">
               <AccordionTrigger>入力した背景</AccordionTrigger>
@@ -569,23 +619,79 @@ function Simulation({
         </aside>
       </div>
 
-      <div className="fixed inset-x-0 bottom-4 z-10 mx-auto w-full max-w-6xl px-4 sm:px-6">
-        <Seekbar
-          day={day}
-          total={SIM_DAYS}
-          limit={limit}
-          markers={markers}
-          playing={playing}
-          speed={speed}
-          onToggle={toggle}
-          onSpeed={(s) => setSpeed(s === 3 ? 3 : 1)}
-          onSeek={seek}
-          blockedMessage={
-            openIssue
-              ? `${openIssue.day}日目の出来事に対応するか見送るまで、先へは進めません`
-              : undefined
-          }
-        />
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/90">
+        {/* 開閉のボタン。開いていても閉じていても、帯の上の線の右端の同じ位置に出す */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 mx-auto max-w-6xl px-4 sm:px-6">
+          <button
+            type="button"
+            onClick={() => setSeekbarOpen(!seekbarOpen)}
+            aria-expanded={seekbarOpen}
+            aria-label={
+              seekbarOpen ? "シークバーを最小化する" : "シークバーを開く"
+            }
+            title={seekbarOpen ? "最小化する" : "開く"}
+            className="pointer-events-auto absolute right-4 -top-3.5 flex size-7 items-center justify-center rounded-full border bg-background text-sub shadow-sm transition-colors hover:border-primary/50 hover:text-primary sm:right-6"
+          >
+            <IconChevronDown
+              className={`size-4 transition-transform duration-500 ${seekbarOpen ? "" : "rotate-180"}`}
+            />
+          </button>
+        </div>
+        {/* 開閉は 0.5 秒かけて、高さと透明度を変える（見えていない側は操作できないようにする） */}
+        <div
+          inert={!seekbarOpen}
+          className={`grid transition-[grid-template-rows,opacity] duration-500 ease-in-out ${seekbarOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+        >
+          <div className="overflow-hidden">
+            <Seekbar
+              day={day}
+              total={SIM_DAYS}
+              limit={limit}
+              markers={markers}
+              playing={playing}
+              speed={speed}
+              onToggle={toggle}
+              onSpeed={(s) => setSpeed(s === 3 ? 3 : 1)}
+              onSeek={seek}
+              blockedMessage={
+                openIssue
+                  ? `${openIssue.day}日目の出来事に対応するか見送るまで、先へは進めません`
+                  : undefined
+              }
+            />
+          </div>
+        </div>
+        <div
+          inert={seekbarOpen}
+          className={`grid transition-[grid-template-rows,opacity] duration-500 ease-in-out ${seekbarOpen ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"}`}
+        >
+          <div className="overflow-hidden">
+            <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-1.5 sm:px-6">
+              <Button
+                variant="primary"
+                size="icon-sm"
+                className="size-8 rounded-full"
+                onClick={toggle}
+                aria-label={playing ? "一時停止" : "再生"}
+                disabled={day >= SIM_DAYS}
+              >
+                {playing ? <IconPlayerPauseFilled /> : <IconPlayerPlayFilled />}
+              </Button>
+              <span className="text-sm tabular-nums">
+                <b>{Math.floor(day)}</b>
+                <span className="text-muted-foreground">
+                  {" "}
+                  日目 / {SIM_DAYS}日
+                </span>
+              </span>
+              {openIssue && (
+                <span className="text-xs text-error">
+                  {openIssue.day}日目の出来事が未対応です
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
       {atIncident && (
         <div className="sr-only" role="alert">
@@ -606,12 +712,12 @@ function Stat({
   unit?: string;
 }) {
   return (
-    <div className="min-w-16 rounded-lg border px-3 py-1.5 text-center">
-      <dt className="text-[11px] text-muted-foreground">{label}</dt>
-      <dd>
-        <b className="text-xl tabular-nums">{value}</b>
+    <div className="flex items-baseline gap-1">
+      <dt className="text-[13px] text-muted-foreground">{label}</dt>
+      <dd className="flex items-baseline gap-1">
+        <b className="text-[28px] leading-none tabular-nums">{value}</b>
         {unit && (
-          <span className="ml-0.5 text-xs text-muted-foreground">{unit}</span>
+          <span className="text-[13px] text-muted-foreground">{unit}</span>
         )}
       </dd>
     </div>
@@ -628,35 +734,30 @@ function CalmCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card>
-      <CardHeader>
+    <div className="grid gap-3 rounded-[10px] border px-[18px] py-4 text-sm">
+      <div>
         {badge && (
-          <Badge variant="ghost" size="sm" className="justify-self-start">
-            {badge}
-          </Badge>
+          <p className="text-xs font-bold tracking-wider text-sub">{badge}</p>
         )}
-        <CardTitle className="leading-snug">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-3 text-sm">{children}</CardContent>
-    </Card>
+        <h2 className="mt-1 text-base leading-relaxed font-bold">{title}</h2>
+      </div>
+      {children}
+    </div>
   );
 }
 
-const STATUS: Record<
-  IssueState,
-  { text: string; tone: "info" | "success" | "neutral" | "error" }
-> = {
-  avoided: { text: "回避", tone: "info" },
-  done: { text: "対応済み", tone: "success" },
-  skipped: { text: "見送り", tone: "neutral" },
-  open: { text: "未対応", tone: "error" },
+const STATUS: Record<IssueState, { text: string; className: string }> = {
+  avoided: { text: "回避", className: "font-medium text-primary" },
+  done: { text: "対応済み", className: "font-medium text-primary" },
+  skipped: { text: "見送り", className: "text-sub" },
+  open: { text: "未対応", className: "font-medium text-error" },
 };
 
 function StatusBadge({ i }: { i: Issue }) {
-  const { text, tone } = STATUS[issueState(i)];
+  const { text, className } = STATUS[issueState(i)];
   return (
-    <Badge tone={tone} appearance="soft" size="sm" className="shrink-0">
+    <span className={`shrink-0 text-xs whitespace-nowrap ${className}`}>
       {text}
-    </Badge>
+    </span>
   );
 }

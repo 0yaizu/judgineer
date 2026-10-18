@@ -1,4 +1,6 @@
 import type {
+  AppRecord,
+  AppSummary,
   ChatMessage,
   ChatPhase,
   DiffRow,
@@ -11,6 +13,8 @@ import type {
 import type { Architecture, Background } from "@tka/shared";
 
 export type {
+  AppRecord,
+  AppSummary,
   Architecture,
   Background,
   ChatMessage,
@@ -36,11 +40,15 @@ export type AIConfig = {
   provider: string;
   label: string;
   status: { ok: boolean; detail: string };
-  target: { dir: string; exists: boolean };
 };
 
+/** judgineer load で読み込んだ、検査するフォルダ */
 export type Target = {
-  dir: string;
+  id: string;
+  path: string;
+  name: string;
+  created_at: string;
+  last_loaded_at: string;
   exists: boolean;
   background: Partial<Background> | null;
 };
@@ -51,4 +59,15 @@ export type Progress = {
   total?: number;
   chars?: number;
   elapsed?: number;
+  steps?: string[];
+  stats?: {
+    files?: number;
+    languages?: string[];
+    checksCompleted?: number;
+    checksTotal?: number;
+    nodes?: number;
+    edges?: number;
+    flows?: number;
+  };
+  partial?: unknown; // 形は lib/partial.ts の readPartial で検査する
 };
