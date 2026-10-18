@@ -169,6 +169,18 @@ export type ProjectSummary = {
   decided: number;
 };
 
+export type AppSummary = {
+  id: string;
+  title: string;
+  updated_at: string;
+};
+
+export type AppRecord = {
+  id: string;
+  updated_at: string;
+  background: Background | null;
+};
+
 /** judgineer load で読み込んだ検査対象のフォルダ */
 export type Target = {
   id: string;

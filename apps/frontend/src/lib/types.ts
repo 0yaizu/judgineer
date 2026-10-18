@@ -1,4 +1,6 @@
 import type {
+  AppRecord,
+  AppSummary,
   ChatMessage,
   ChatPhase,
   DiffRow,
@@ -11,6 +13,8 @@ import type {
 import type { Architecture, Background } from "@tka/shared";
 
 export type {
+  AppRecord,
+  AppSummary,
   Architecture,
   Background,
   ChatMessage,

@@ -19,7 +19,7 @@ export const HELP = `judgineer ${version}
 
 環境変数: PORT (既定 3001) / JUDGINEER_HOME (既定 ~/.judgineer) / JUDGINEER_NO_OPEN=1 (ブラウザを開かない)`;
 
-const url = (port: number, query = "") => `http://127.0.0.1:${port}/${query}`;
+const url = (port: number, path = "") => `http://127.0.0.1:${port}/${path}`;
 
 async function start(): Promise<void> {
   const { port, started } = await ensureServer();
@@ -35,7 +35,7 @@ async function load(args: string[]): Promise<void> {
   const { registerTarget } = await import("../targets");
   const target = registerTarget(args[0] ?? process.cwd());
   const { port, started } = await ensureServer();
-  const to = url(port, `?target=${encodeURIComponent(target.id)}`);
+  const to = url(port, `register?app=${encodeURIComponent(target.id)}`);
   console.log(`読み込みました: ${target.path}`);
   if (started) console.log("サーバーを起動しました");
   console.log(`  ${to}`);

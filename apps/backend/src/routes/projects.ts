@@ -45,7 +45,10 @@ export default new Hono()
         `検査対象のフォルダが見つかりません: ${target.path}`,
       );
 
-    return c.json(createProject(bg, target.path));
+    const project = createProject(bg, target.path);
+    // 登録したアプリとして、フォルダと同じ行に背景を残す
+    repo.saveApp(bg, target.id);
+    return c.json(project);
   })
   .get("/:pid", (c) => c.json(projectPayload(loadProject(c.req.param("pid")))))
   .get("/:pid/progress", (c) => {

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readdirSync } from "node:fs";
+import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
@@ -129,4 +129,56 @@ test("file: パストラバーサルを拒否する", async () => {
       expect(res.status).toBe(404);
     }
   }
+});
+
+test("apps: 読み込んだだけでは一覧に出ず、登録で載り、同じフォルダの再登録は背景を更新する", async () => {
+  type AppList = { id: string; title: string }[];
+  const dir = mkdtempSync(join(tmpdir(), "tka-app-"));
+  writeFileSync(join(dir, "app.py"), "print('hi')\n");
+  const t = registerTarget(dir);
+  const before = (await api<AppList>("GET", "/api/apps")).data;
+  expect(before.some((a) => a.id === t.id)).toBe(false);
+
+  await api("POST", "/api/projects", {
+    target_id: t.id,
+    background: { title: "新アプリ" },
+  });
+  const created = (await api<AppList>("GET", "/api/apps")).data;
+  expect(created.length).toBe(before.length + 1);
+  expect(created.find((a) => a.id === t.id)?.title).toBe("新アプリ");
+
+  await api("POST", "/api/projects", {
+    target_id: t.id,
+    background: { title: "新アプリ改", notes: "追記" },
+  });
+  const after = (await api<AppList>("GET", "/api/apps")).data;
+  expect(after.length).toBe(created.length);
+  const saved = await api<{ background: { title: string; notes: string } }>(
+    "GET",
+    `/api/apps/${t.id}`,
+  );
+  expect(saved.data.background.title).toBe("新アプリ改");
+  expect(saved.data.background.notes).toBe("追記");
+});
+
+test("apps: 無い id は 404", async () => {
+  expect((await api("GET", "/api/apps/nope")).status).toBe(404);
+  expect(
+    (
+      await api("POST", "/api/projects", {
+        target_id: "nope",
+        background: { title: "x" },
+      })
+    ).status,
+  ).toBe(404);
+});
+
+test("apps: 空文字の target_id は 404 で、id が空のアプリを作らない", async () => {
+  const before = (await api<unknown[]>("GET", "/api/apps")).data.length;
+  const res = await api("POST", "/api/projects", {
+    target_id: "",
+    background: { title: "x" },
+  });
+  expect(res.status).toBe(404);
+  expect((await api<unknown[]>("GET", "/api/apps")).data.length).toBe(before);
 });

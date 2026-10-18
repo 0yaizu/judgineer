@@ -2,6 +2,8 @@ import type { AppType } from "@tka/backend/app";
 import { hc } from "hono/client";
 import type {
   AIConfig,
+  AppRecord,
+  AppSummary,
   Background,
   Issue,
   Lesson,
@@ -90,6 +92,9 @@ export const api = {
   removeTarget: (id: string) =>
     read<{ ok: true }>(client.targets[":id"].$delete({ param: { id } })),
   lessons: () => read<Lesson[]>(client.lessons.$get()),
+  apps: () => read<AppSummary[]>(client.apps.$get()),
+  app: (id: string) =>
+    read<AppRecord>(client.apps[":id"].$get({ param: { id } })),
   projects: () => read<ProjectSummary[]>(client.projects.$get()),
   project: (pid: string) =>
     read<ProjectView>(projectApi.$get({ param: { pid } })),

@@ -1,330 +1,129 @@
-import { IconArrowRight, IconX } from "@tabler/icons-react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { IconPlus } from "@tabler/icons-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ErrorBox } from "#/components/ErrorBox";
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "#/components/starwind/alert";
-import { Button } from "#/components/starwind/button";
+import { ButtonVariants } from "#/components/starwind/button";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "#/components/starwind/card";
-import { Input } from "#/components/starwind/input";
-import { Label } from "#/components/starwind/label";
-import { Textarea } from "#/components/starwind/textarea";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "#/components/starwind/table";
 import { Waiting } from "#/components/Waiting";
 import { api } from "#/lib/api";
-import type { Background, ProjectSummary, Target } from "#/lib/types";
+import type { AppSummary, ProjectSummary } from "#/lib/types";
 
-export const Route = createFileRoute("/")({
-  component: Home,
-  // judgineer load が開く URL (/?target=<id>) で、読み込んだフォルダを選んだ状態にする
-  validateSearch: (s: Record<string, unknown>): { target?: string } =>
-    typeof s.target === "string" ? { target: s.target } : {},
-});
+const RECENT = 5;
 
-const FIELDS: {
-  key: keyof Background;
-  label: string;
-  hint: string;
-  rows: number;
-}[] = [
-  {
-    key: "title",
-    label: "アプリ名",
-    hint: "例: A社 顧客データ提供API",
-    rows: 1,
-  },
-  {
-    key: "stakeholders",
-    label: "関係者",
-    hint: "誰が作って、誰が使っているか。取引先や社内の部署など",
-    rows: 2,
-  },
-  {
-    key: "data_flow",
-    label: "データの流れ",
-    hint: "どこからどこへ、いつデータが渡るか",
-    rows: 2,
-  },
-  {
-    key: "data_types",
-    label: "扱うデータ",
-    hint: "個人情報、決済情報など",
-    rows: 1,
-  },
-  {
-    key: "constraints",
-    label: "契約・制約",
-    hint: "納期、SLA、止めたときの影響、法律など",
-    rows: 2,
-  },
-  {
-    key: "team",
-    label: "チームの体制",
-    hint: "人数、担当、今後の予定",
-    rows: 1,
-  },
-  {
-    key: "notes",
-    label: "その他",
-    hint: "今後の予定や気になっていること",
-    rows: 2,
-  },
-];
+export const Route = createFileRoute("/")({ component: Projects });
 
-const EMPTY: Background = {
-  title: "",
-  stakeholders: "",
-  data_flow: "",
-  data_types: "",
-  constraints: "",
-  team: "",
-  notes: "",
-};
-
-// 検査対象に background.json があれば、それを下書きにする
-const draftFrom = (t: Target | undefined): Background => ({
-  ...EMPTY,
-  ...Object.fromEntries(
-    Object.entries(t?.background ?? {}).filter(
-      ([k, v]) => k in EMPTY && typeof v === "string",
-    ),
-  ),
-});
-
-function Home() {
-  const navigate = useNavigate();
-  const search = Route.useSearch();
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [targets, setTargets] = useState<Target[] | null>(null);
-  const [targetId, setTargetId] = useState<string | undefined>(search.target);
-  const [bg, setBg] = useState<Background>(EMPTY);
-  const [busyPid, setBusyPid] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+function Projects() {
+  const [apps, setApps] = useState<AppSummary[] | null>(null);
+  const [sessions, setSessions] = useState<ProjectSummary[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
     api
-      .projects()
-      .then(setProjects)
-      .catch(() => {});
-    api
-      .targets()
-      .then((list) => {
-        setTargets(list);
-        // URL で指定されたフォルダ、なければ最後に読み込んだもの (一覧は新しい順)
-        const first = list.find((t) => t.id === search.target) ?? list[0];
-        setTargetId(first?.id);
-        setBg(draftFrom(first));
-      })
+      .apps()
+      .then(setApps)
       .catch((e: Error) => setError(e.message));
-  }, [search.target]);
-
-  const target = targets?.find((t) => t.id === targetId);
-
-  const choose = (t: Target) => {
-    setTargetId(t.id);
-    setBg(draftFrom(t));
-  };
-
-  const remove = async (t: Target) => {
-    try {
-      await api.removeTarget(t.id);
-      const rest = (targets ?? []).filter((x) => x.id !== t.id);
-      setTargets(rest);
-      if (t.id === targetId) {
-        setTargetId(rest[0]?.id);
-        setBg(draftFrom(rest[0]));
-      }
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-
-  const submit = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      if (!target) return;
-      const p = await api.createProject(target.id, bg);
-      setBusyPid(p.id);
-      await api.analyze(p.id);
-      navigate({ to: "/p/$pid", params: { pid: p.id } });
-    } catch (e) {
-      setError((e as Error).message);
-      setBusy(false);
-      setBusyPid(null);
-    }
-  };
+    api
+      .projects()
+      .then(setSessions)
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <section className="grid content-start gap-6">
-        <div>
-          <h1 className="text-2xl font-bold">完成したアプリを登録する</h1>
-          <p className="mt-2 max-w-2xl text-muted-foreground">
-            完成したアプリと、その背景を入力してください。公開後の運用を早送りで再生し、途中で起きる出来事に自分で対応していきます。
-          </p>
+        <div className="grid gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">登録したアプリ</h1>
+            <p className="mt-2 text-muted-foreground">
+              ジャッジニアに登録したアプリの一覧です。選ぶと、登録した内容を入れた登録画面が開きます。
+            </p>
+          </div>
+          <Link
+            to="/register"
+            className={`${ButtonVariants.button({ variant: "primary" })} justify-self-end`}
+          >
+            <IconPlus />
+            アプリを登録
+          </Link>
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>1. アプリのコード</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              登録するとコードのコピーを取り、元のファイルは変えません。
-            </p>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            {targets === null && (
-              <p className="text-sm text-muted-foreground">読み込み中…</p>
-            )}
-            {targets?.length === 0 && (
-              <Alert variant="info">
-                <AlertTitle>検査するフォルダがありません</AlertTitle>
-                <AlertDescription>
-                  アプリのフォルダでターミナルを開き、
-                  <code>judgineer load</code>{" "}
-                  を実行してください。ここに追加されます。
-                </AlertDescription>
-              </Alert>
-            )}
-            <ul className="grid gap-2">
-              {targets?.map((t) => (
-                <li
-                  key={t.id}
-                  className={`flex items-center gap-2 rounded-md border p-3 ${
-                    t.id === targetId ? "border-primary bg-primary/5" : ""
-                  }`}
-                >
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 text-left"
-                    onClick={() => choose(t)}
-                    aria-pressed={t.id === targetId}
-                  >
-                    <span className="font-medium">{t.name}</span>
-                    {!t.exists && (
-                      <span className="ml-2 text-sm text-destructive">
-                        見つかりません
-                      </span>
-                    )}
-                    <code className="block truncate text-xs text-muted-foreground">
-                      {t.path}
-                    </code>
-                  </button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label="一覧から外す"
-                    onClick={() => remove(t)}
-                  >
-                    <IconX />
-                  </Button>
-                </li>
+        <ErrorBox message={error} />
+        {!apps && !error && <Waiting text="読み込み中" />}
+        {apps?.length === 0 && (
+          <p className="text-muted-foreground">
+            まだ登録がありません。「アプリを登録」から始めてください。
+          </p>
+        )}
+        {apps && apps.length > 0 && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>アプリ名</TableHead>
+                <TableHead>最終登録日</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {apps.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell>
+                    <Link
+                      to="/register"
+                      search={{ app: p.id }}
+                      className="font-medium hover:underline"
+                    >
+                      {p.title}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{p.updated_at.slice(0, 10)}</TableCell>
+                </TableRow>
               ))}
-            </ul>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>2. アプリの背景</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              AIはコードしか見られません。どちらの修正が良いかは、ここに書いた事情で変わります。
-            </p>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            {FIELDS.map((f) => (
-              <div
-                key={f.key}
-                className="grid gap-1.5 sm:grid-cols-[8rem_1fr] sm:gap-4"
-              >
-                <Label htmlFor={f.key} className="sm:pt-2.5">
-                  {f.label}
-                </Label>
-                {f.rows === 1 ? (
-                  <Input
-                    id={f.key}
-                    value={bg[f.key]}
-                    placeholder={f.hint}
-                    onValueChange={(v) => setBg({ ...bg, [f.key]: v })}
-                  />
-                ) : (
-                  <Textarea
-                    id={f.key}
-                    rows={f.rows}
-                    value={bg[f.key]}
-                    placeholder={f.hint}
-                    onChange={(e) => setBg({ ...bg, [f.key]: e.target.value })}
-                  />
-                )}
-              </div>
-            ))}
-            <div className="grid gap-3 sm:pl-36">
-              <ErrorBox message={error} />
-              {busy ? (
-                <Waiting
-                  text={
-                    busyPid
-                      ? "運用中に起きる出来事の台本を作っています（1〜2分かかります）"
-                      : "コードを調べています"
-                  }
-                  pid={busyPid ?? undefined}
-                />
-              ) : (
-                <div className="flex items-center gap-3">
-                  <Button
-                    variant="primary"
-                    disabled={!bg.title.trim() || !target?.exists}
-                    onClick={submit}
-                  >
-                    運用シミュレーションを作る
-                    <IconArrowRight />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => setBg(draftFrom(target))}
-                  >
-                    下書きに戻す
-                  </Button>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+            </TableBody>
+          </Table>
+        )}
       </section>
 
       <aside>
         <Card size="sm">
           <CardHeader>
-            <CardTitle>これまでのアプリ</CardTitle>
+            <CardTitle>セッション履歴</CardTitle>
           </CardHeader>
           <CardContent>
-            {projects.length === 0 && (
+            {sessions.length === 0 && (
               <p className="text-sm text-muted-foreground">まだありません</p>
             )}
             <ul className="divide-y">
-              {projects.map((p) => (
-                <li key={p.id} className="py-2">
+              {sessions.slice(0, RECENT).map((s) => (
+                <li key={s.id} className="py-2">
                   <Link
                     to="/p/$pid"
-                    params={{ pid: p.id }}
+                    params={{ pid: s.id }}
                     className="font-medium hover:underline"
                   >
-                    {p.title}
+                    {s.title}
                   </Link>
                   <p className="text-xs text-muted-foreground">
-                    {p.created_at.slice(0, 10)}・判断済み {p.decided}/{p.issues}
+                    {s.created_at.slice(0, 10)}・判断済み {s.decided}/{s.issues}
                   </p>
                 </li>
               ))}
             </ul>
+            {sessions.length > RECENT && (
+              <Link to="/sessions" className="mt-2 block text-sm underline">
+                すべて見る
+              </Link>
+            )}
           </CardContent>
         </Card>
       </aside>

@@ -1,7 +1,20 @@
-import { and, asc, desc, eq, isNotNull, notInArray, sql } from "drizzle-orm";
+import type { Background } from "@tka/shared";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  isNotNull,
+  isNull,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import { db } from "./db";
 import { apps, issues, lessons, messages, projects } from "./db/schema";
 import type {
+  AppRecord,
+  AppSummary,
   ChatMessage,
   Lesson,
   Project,
@@ -163,6 +176,36 @@ export function listProjects(): ProjectSummary[] {
       decided: mine.filter((i) => i.data.feedback).length,
     };
   });
+}
+
+/** 登録したアプリ。judgineer load しただけで背景が無いフォルダは含めない */
+export function listApps(): AppSummary[] {
+  return db
+    .select()
+    .from(apps)
+    .where(or(isNotNull(apps.background), isNull(apps.path)))
+    .orderBy(desc(apps.updatedAt))
+    .all()
+    .map((r) => ({
+      id: r.id,
+      title: r.background?.title ?? r.name,
+      updated_at: r.updatedAt,
+    }));
+}
+
+export function getApp(id: string): AppRecord | undefined {
+  const r = db.select().from(apps).where(eq(apps.id, id)).get();
+  return r && { id: r.id, updated_at: r.updatedAt, background: r.background };
+}
+
+/** id があればその背景を更新し、無ければ新しいアプリとして登録する */
+export function saveApp(background: Background, id = newId()): void {
+  const at = now();
+  const set = { name: background.title, background, updatedAt: at };
+  db.insert(apps)
+    .values({ id, createdAt: at, ...set })
+    .onConflictDoUpdate({ target: apps.id, set })
+    .run();
 }
 
 export function listLessons(): Lesson[] {
