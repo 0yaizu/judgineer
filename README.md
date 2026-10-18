@@ -8,9 +8,9 @@ AIが当たり前の時代に、根拠を持って判断できるエンジニア
 - 説明スライド：[judgineer-slides.pdf](docs/judgineer-slides.pdf)
 
 ## すぐに試す
-Linux、macOS、Windows（Git Bash）で動きます。AIの機能にはClaude Codeを使うので、先に`claude`コマンドをインストールしてログインしておいてください。
+LinuxとmacOSで動きます。Windows（Git Bash）向けの実行ファイルも用意していますが、実機での動作はまだ確認できていません。AIの機能にはClaude Codeを使うので、先に`claude`コマンドをインストールしてログインしておいてください。
 
-**1.インストールする**
+**1. インストールする**
 
 ターミナルで次を実行します。
 
@@ -18,11 +18,11 @@ Linux、macOS、Windows（Git Bash）で動きます。AIの機能にはClaude C
 curl -fsSL https://raw.githubusercontent.com/jphacks/tka_2607/main/install.sh | bash
 ```
 
-**2.ターミナルを開き直す**
+**2. ターミナルを開き直す**
 
 インストールしたターミナルのままでは、まだ`judgineer`コマンドが使えません。新しいターミナルを開いてください。
 
-**3.アプリを読み込む**
+**3. アプリを読み込む**
 
 試したいアプリのフォルダに移動して、次を実行します。ブラウザでジャッジニアが開くので、取引先や契約などの背景を入れて登録します。
 
