@@ -113,3 +113,13 @@ test("apps: 無い id は 404", async () => {
     ).status,
   ).toBe(404);
 });
+
+test("apps: 空文字の app_id は拒否し、id が空のアプリを作らない", async () => {
+  const before = (await api<unknown[]>("GET", "/api/apps")).data.length;
+  const res = await api("POST", "/api/projects", {
+    background: { title: "x" },
+    app_id: "",
+  });
+  expect(res.status).toBe(400);
+  expect((await api<unknown[]>("GET", "/api/apps")).data.length).toBe(before);
+});

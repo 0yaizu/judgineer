@@ -27,7 +27,7 @@ export default new Hono()
       c,
       z.object({
         background: z.record(z.string(), z.unknown()),
-        app_id: z.string().optional(),
+        app_id: z.string().min(1).optional(),
       }),
     );
     const bg = Object.fromEntries(
