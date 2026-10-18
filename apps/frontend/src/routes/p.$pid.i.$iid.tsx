@@ -48,6 +48,9 @@ type Busy = "" | "start" | "chat" | "hint" | "commit" | "skip";
 
 const TAB_CLASS =
   "grow-0 rounded-none border-0 border-b-2 border-transparent px-3.5 py-2 text-sub data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none";
+// 修正の結果のタブは、選んでいてもいなくても緑で目立たせる（Starwind の既定の文字色やダーク時の色も上書きする）
+const FIX_TAB_CLASS =
+  "grow-0 rounded-none border-0 border-b-2 border-transparent px-3.5 py-2 font-medium text-primary data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none dark:text-primary";
 const TAB_COUNT =
   "rounded-lg bg-line-soft px-1.5 text-[11px] font-normal text-sub";
 
@@ -507,15 +510,12 @@ function IssuePage({
                 <span className={TAB_COUNT}>{issue.signals.length}</span>
               </TabsTrigger>
               {issue.fix && (
-                <TabsTrigger
-                  value="fix"
-                  className={`${TAB_CLASS} font-medium text-primary data-[state=active]:text-primary`}
-                >
+                <TabsTrigger value="fix" className={FIX_TAB_CLASS}>
                   <IconSparkles className="size-4" />
                   修正の結果
                   {tab !== "fix" && (
                     <span aria-hidden className="relative flex size-2">
-                      <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
+                      <span className="absolute inline-flex size-full rounded-full bg-primary opacity-60 motion-safe:animate-ping" />
                       <span className="relative inline-flex size-2 rounded-full bg-primary" />
                     </span>
                   )}
