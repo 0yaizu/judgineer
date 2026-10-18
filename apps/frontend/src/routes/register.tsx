@@ -5,26 +5,19 @@ import {
   IconFolder,
   IconPencil,
   IconSearch,
+  IconX,
 } from "@tabler/icons-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ErrorBox } from "#/components/ErrorBox";
 import { PageHeader, panelClass, pillClass } from "#/components/Page";
 import { Button } from "#/components/starwind/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "#/components/starwind/card";
 import { Input } from "#/components/starwind/input";
 import { Label } from "#/components/starwind/label";
 import { Textarea } from "#/components/starwind/textarea";
 import { Waiting } from "#/components/Waiting";
 import { api } from "#/lib/api";
 import type { AppSummary, Background, Target } from "#/lib/types";
-
-const RECENT = 5;
 
 export const Route = createFileRoute("/register")({
   // ?app=<id> で、そのアプリのフォルダを選び、登録済みの背景を入れた状態で開く (judgineer load もこの URL を開く)
@@ -166,7 +159,7 @@ function Register() {
         setDraft(d);
         setBg(d);
       })
-      .catch((e: Error) => setError((e as Error).message));
+      .catch((e: Error) => setError(e.message));
   }, [app]);
 
   const target = targets?.find((t) => t.id === targetId);
@@ -211,13 +204,15 @@ function Register() {
   const filled = FIELDS.filter((f) => bg[f.key].trim()).length;
   const ready = !!target?.exists && !!bg.title.trim();
   // 押せない理由。フォルダを読み込み中は理由を出さない
-  const blocked = !target
+  const blocked = !targets
     ? ""
-    : !target.exists
-      ? "検査するフォルダが見つかると、作れるようになります"
-      : !bg.title.trim()
-        ? "アプリ名を入れると、作れるようになります"
-        : "";
+    : !target
+      ? "フォルダを読み込むと、作れるようになります"
+      : !target.exists
+        ? "検査するフォルダが見つかると、作れるようになります"
+        : !bg.title.trim()
+          ? "アプリ名を入れると、作れるようになります"
+          : "";
   const editing = app ? apps.find((a) => a.id === app) : undefined;
 
   return (
@@ -237,40 +232,87 @@ function Register() {
           )}
 
           <Section n={1} title="アプリのコード">
-            <div className={`${panelClass} flex items-start gap-4 p-5`}>
-              <span
-                className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
-                  target && !target.exists
-                    ? "bg-warn-tint text-error"
-                    : "bg-tint text-primary"
-                }`}
-              >
-                <IconFolder className="size-5" />
-              </span>
-              <div className="min-w-0 flex-1 text-sm">
-                {target ? (
-                  <>
-                    <p className="flex items-center gap-2 font-medium">
-                      <span
-                        className={`size-2 rounded-full ${target.exists ? "bg-primary" : "bg-error"}`}
-                      />
-                      {target.exists
-                        ? "検査するフォルダ"
-                        : "検査するフォルダが見つかりません"}
-                    </p>
-                    <code className="mt-1 block font-mono text-xs break-all text-sub">
-                      {target.dir}
+            <p className="-mt-1 mb-4 text-sm text-sub">
+              検査するフォルダを選んでください。登録するとコードのコピーを取り、元のファイルは変えません。
+            </p>
+            {targets === null && (
+              <p className="text-sm text-muted-foreground">読み込み中…</p>
+            )}
+            {targets?.length === 0 && (
+              <div className={`${panelClass} flex items-start gap-4 p-5`}>
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-tint text-primary">
+                  <IconFolder className="size-5" />
+                </span>
+                <div className="text-sm">
+                  <p className="font-medium">検査するフォルダがありません</p>
+                  <p className="mt-1 text-sub">
+                    アプリのフォルダでターミナルを開き、
+                    <code className="mx-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                      judgineer load
                     </code>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      登録するとコードのコピーを取り、元のファイルは変えません。別のアプリにするときは、環境変数
-                      TARGET_DIR を変えて起動し直してください。
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-muted-foreground">読み込み中…</p>
-                )}
+                    を実行してください。ここに追加されます。
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
+            {targets && targets.length > 0 && (
+              <ul className="grid gap-2.5">
+                {targets.map((t) => {
+                  const selected = t.id === targetId;
+                  return (
+                    <li
+                      key={t.id}
+                      className={`${panelClass} group flex items-center gap-2 transition-all duration-300 ${
+                        selected
+                          ? "border-primary ring-2 ring-primary/20"
+                          : "hover:border-primary/40"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => choose(t)}
+                        aria-pressed={selected}
+                        className="flex min-w-0 flex-1 items-center gap-4 p-4 text-left"
+                      >
+                        <span
+                          className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
+                            !t.exists
+                              ? "bg-warn-tint text-error"
+                              : selected
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-tint text-primary"
+                          }`}
+                        >
+                          <IconFolder className="size-5" />
+                        </span>
+                        <span className="min-w-0 text-sm">
+                          <span className="flex items-center gap-2 font-medium">
+                            {t.name}
+                            {!t.exists && (
+                              <span className="text-xs font-normal text-error">
+                                見つかりません
+                              </span>
+                            )}
+                          </span>
+                          <code className="mt-0.5 block truncate font-mono text-xs text-sub">
+                            {t.path}
+                          </code>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`${t.name} を一覧から外す`}
+                        title="一覧から外す"
+                        onClick={() => remove(t)}
+                        className="mr-3 flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-error"
+                      >
+                        <IconX className="size-4" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </Section>
 
           <Section

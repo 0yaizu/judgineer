@@ -3,37 +3,13 @@ import {
   IconFileCode,
   IconFolderFilled,
 } from "@tabler/icons-react";
-import { Fragment, useEffect, useState } from "react";
-import { api } from "#/lib/api";
+import { Fragment } from "react";
 
-// TODO(backend): 登録したときのフォルダ名はまだ保存していない。今は現在の TARGET_DIR の名前で代用しているので、
-// 後から TARGET_DIR を変えると、古いセッションでも新しいフォルダ名が出る。
-// projects にフォルダ名を保存したら、それを root で渡す（渡されたときは下の問い合わせをしない）。
-
-// 現在の TARGET_DIR のフォルダ名。全画面で同じなので、一度だけ聞く
-let rootName: Promise<string> | null = null;
-const loadRootName = () => {
-  rootName ??= api
-    .target()
-    .then((t) => t.dir.split(/[\\/]/).filter(Boolean).pop() ?? "")
-    .catch(() => "");
-  return rootName;
-};
+// TODO(backend): 登録したときのフォルダ名（検査対象のフォルダの名前）はまだセッションに保存していない。
+// 保存したら root で渡す。渡されないあいだは、ファイルのパスの中のフォルダだけを出す。
 
 /** エクスプローラーのように、ファイルの場所を「フォルダ > フォルダ > ファイル」で出す */
-export function PathBar({
-  file,
-  root: given,
-}: {
-  file: string;
-  root?: string;
-}) {
-  const [fallback, setFallback] = useState("");
-  useEffect(() => {
-    if (given === undefined) loadRootName().then(setFallback);
-  }, [given]);
-  const root = given ?? fallback;
-
+export function PathBar({ file, root }: { file: string; root?: string }) {
   const parts = file.split("/").filter(Boolean);
   const name = parts.pop() ?? file;
   const folders = root ? [root, ...parts] : parts;

@@ -417,7 +417,26 @@ function Simulation({
                   {current.incident_title}
                 </h2>
               </div>
-              <p>{current.incident_story}</p>
+              {detail.loading ? (
+                <Waiting
+                  text="出来事の詳細を書いています"
+                  pid={pid}
+                  iid={current.id}
+                />
+              ) : detail.error ? (
+                <>
+                  <ErrorBox message={detail.error} />
+                  <Button
+                    variant="secondary"
+                    className="justify-self-start"
+                    onClick={detail.retry}
+                  >
+                    もう一度試す
+                  </Button>
+                </>
+              ) : (
+                <p>{current.incident_story}</p>
+              )}
               {origin && (
                 <p className="rounded-md bg-background/70 p-2">
                   {origin.day}

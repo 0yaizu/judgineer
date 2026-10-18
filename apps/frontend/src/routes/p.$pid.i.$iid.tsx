@@ -105,23 +105,21 @@ function DetailGate({
           }
           current={`${issue.day}日目の出来事`}
         />
-        <Card className="bg-warning/10 ring-warning">
-          <CardHeader>
-            <Badge variant="warning" size="sm" className="self-start">
+        <div className="grid gap-3 rounded-r-lg border-l-4 border-error bg-warn-tint px-5 py-4">
+          <div>
+            <p className="text-xs font-bold tracking-wider text-error">
               運用 {issue.day}日目に発生
-            </Badge>
-            <CardTitle className="text-xl leading-snug">
+            </p>
+            <h1 className="mt-1 text-[22px] leading-snug font-bold">
               {issue.incident_title}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Waiting
-              text="出来事の詳細を書いています"
-              pid={p.id}
-              iid={issue.id}
-            />
-          </CardContent>
-        </Card>
+            </h1>
+          </div>
+          <Waiting
+            text="出来事の詳細を書いています"
+            pid={p.id}
+            iid={issue.id}
+          />
+        </div>
       </div>
     );
   if (error)
