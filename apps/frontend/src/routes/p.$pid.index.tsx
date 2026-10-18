@@ -1,6 +1,5 @@
 import {
   IconChevronDown,
-  IconChevronUp,
   IconPlayerPauseFilled,
   IconPlayerPlayFilled,
 } from "@tabler/icons-react";
@@ -256,6 +255,27 @@ function Simulation({
       errorTimer.current = setTimeout(() => setError(""), MESSAGE_MS);
     }
   };
+
+  // スペースキーで再生・一時停止する。文字を打つ欄やボタンにフォーカスがあるときは、その操作を優先する
+  const toggleRef = useRef(toggle);
+  toggleRef.current = toggle;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.repeat) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      const el = e.target as HTMLElement | null;
+      if (
+        el?.closest(
+          "input, textarea, select, button, a, [contenteditable], [role=slider]",
+        )
+      )
+        return;
+      e.preventDefault();
+      toggleRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const markers: Marker[] = reached.map((i) => ({
     day: i.day,
@@ -581,6 +601,23 @@ function Simulation({
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/90">
+        {/* 開閉のボタン。開いていても閉じていても、帯の上の線の右端の同じ位置に出す */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 mx-auto max-w-6xl px-4 sm:px-6">
+          <button
+            type="button"
+            onClick={() => setSeekbarOpen(!seekbarOpen)}
+            aria-expanded={seekbarOpen}
+            aria-label={
+              seekbarOpen ? "シークバーを最小化する" : "シークバーを開く"
+            }
+            title={seekbarOpen ? "最小化する" : "開く"}
+            className="pointer-events-auto absolute right-4 -top-3.5 flex size-7 items-center justify-center rounded-full border bg-background text-sub shadow-sm transition-colors hover:border-primary/50 hover:text-primary sm:right-6"
+          >
+            <IconChevronDown
+              className={`size-4 transition-transform duration-500 ${seekbarOpen ? "" : "rotate-180"}`}
+            />
+          </button>
+        </div>
         {/* 開閉は 0.5 秒かけて、高さと透明度を変える（見えていない側は操作できないようにする） */}
         <div
           inert={!seekbarOpen}
@@ -588,16 +625,6 @@ function Simulation({
         >
           <div className="overflow-hidden">
             <div className="relative">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="absolute top-0 right-1 z-10 size-6"
-                aria-label="シークバーを最小化する"
-                aria-expanded
-                onClick={() => setSeekbarOpen(false)}
-              >
-                <IconChevronDown />
-              </Button>
               <Seekbar
                 day={day}
                 total={SIM_DAYS}
@@ -645,16 +672,6 @@ function Simulation({
                   {openIssue.day}日目の出来事が未対応です
                 </span>
               )}
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="ml-auto size-7"
-                aria-label="シークバーを開く"
-                aria-expanded={false}
-                onClick={() => setSeekbarOpen(true)}
-              >
-                <IconChevronUp />
-              </Button>
             </div>
           </div>
         </div>
