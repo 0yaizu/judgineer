@@ -1,10 +1,9 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { type Background, backgroundSchema, SIM_DAYS } from "@tka/shared";
 import { Hono } from "hono";
 import { z } from "zod";
 import { analyze } from "../analyze";
 import { settled } from "../clean";
-import { config } from "../config";
 import { HttpError, readBody } from "../http";
 import { getProgress } from "../progress";
 import {
@@ -17,16 +16,22 @@ import {
   srcDir,
 } from "../project";
 import * as repo from "../repo";
+import { isDir } from "../targets";
 
 const BG_KEYS = Object.keys(backgroundSchema.shape) as (keyof Background)[];
 
 export default new Hono()
   .get("/", (c) => c.json(repo.listProjects()))
   .post("/", async (c) => {
-    const { background } = await readBody(
+    const { target_id, background } = await readBody(
       c,
-      z.object({ background: z.record(z.string(), z.unknown()) }),
+      z.object({
+        target_id: z.string(),
+        background: z.record(z.string(), z.unknown()),
+      }),
     );
+    const target = repo.getTarget(target_id);
+    if (!target) throw new HttpError(404, "検査するフォルダが見つかりません");
     const bg = Object.fromEntries(
       BG_KEYS.map((k) => {
         const v = background[k];
@@ -34,13 +39,13 @@ export default new Hono()
       }),
     ) as Background;
     if (!bg.title) throw new HttpError(400, "アプリ名を入力してください");
-    if (
-      !existsSync(config.targetDir) ||
-      !statSync(config.targetDir).isDirectory()
-    )
-      throw new HttpError(500, "検査対象のフォルダが見つかりません");
+    if (!isDir(target.path))
+      throw new HttpError(
+        400,
+        `検査対象のフォルダが見つかりません: ${target.path}`,
+      );
 
-    return c.json(createProject(bg));
+    return c.json(createProject(bg, target.path));
   })
   .get("/:pid", (c) => c.json(projectPayload(loadProject(c.req.param("pid")))))
   .get("/:pid/progress", (c) => {

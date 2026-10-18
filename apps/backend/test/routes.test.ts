@@ -1,36 +1,86 @@
 import { expect, test } from "bun:test";
-import { readdirSync } from "node:fs";
-import { config } from "../src/config";
-import { api, calls, installFakeAI, setup } from "./helpers/fake-ai";
+import { mkdtempSync, readdirSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+import { eq } from "drizzle-orm";
+import { db } from "../src/db";
+import { apps } from "../src/db/schema";
+import * as repo from "../src/repo";
+import { registerTarget } from "../src/targets";
+import { api, calls, installFakeAI, setup, TARGET } from "./helpers/fake-ai";
 
 installFakeAI();
 
-test("config / target", async () => {
-  const cfg = await api<{
-    status: { ok: boolean };
-    target: { exists: boolean };
-  }>("GET", "/api/config");
+test("config", async () => {
+  const cfg = await api<{ status: { ok: boolean } }>("GET", "/api/config");
   expect(cfg.data.status.ok).toBe(false); // CLAUDE_BIN は存在しない
-  expect(cfg.data.target.exists).toBe(true);
-  const t = await api<{ exists: boolean; background: { title: string } }>(
-    "GET",
-    "/api/target",
-  );
-  expect(t.data.exists).toBe(true);
-  expect(t.data.background.title).toContain("A社");
+});
+
+test("targets: 一覧・登録・外す", async () => {
+  const t = registerTarget(TARGET);
+  const again = registerTarget(TARGET); // 同じフォルダは増えず、読み込んだ日時だけ更新
+  expect(again.id).toBe(t.id);
+  const list = await api<
+    { id: string; exists: boolean; background: { title: string } }[]
+  >("GET", "/api/targets");
+  const mine = list.data.find((x) => x.id === t.id);
+  expect(mine?.exists).toBe(true);
+  expect(mine?.background.title).toContain("A社");
+  expect(list.data.filter((x) => x.id === t.id).length).toBe(1);
+
+  const other = registerTarget(mkdtempSync(join(tmpdir(), "tka-other-")));
+  expect((await api("DELETE", `/api/targets/${other.id}`)).status).toBe(200);
+  expect((await api("DELETE", `/api/targets/${other.id}`)).status).toBe(404);
+});
+
+test("targets: path の無いアプリは一覧に出ず、外せない。背景つきは外してもアプリが残る", async () => {
+  const at = new Date().toISOString();
+  db.insert(apps)
+    .values({ id: "legacy", name: "旧アプリ", createdAt: at, updatedAt: at })
+    .run();
+  const list = await api<{ id: string }[]>("GET", "/api/targets");
+  expect(list.data.some((x) => x.id === "legacy")).toBe(false);
+  expect((await api("DELETE", "/api/targets/legacy")).status).toBe(404);
+
+  const t = registerTarget(mkdtempSync(join(tmpdir(), "tka-bg-")));
+  db.update(apps)
+    .set({ background: { title: "登録済み" } as never })
+    .where(eq(apps.id, t.id))
+    .run();
+  expect(repo.removeTarget(t.id)).toBe(true);
+  const row = db.select().from(apps).where(eq(apps.id, t.id)).get();
+  expect(row?.path).toBeNull();
+  expect(row?.background).not.toBeNull();
+});
+
+test("targets: ホームと / は登録できない", () => {
+  expect(() => registerTarget(homedir())).toThrow();
+  expect(() => registerTarget("/")).toThrow();
+  expect(() => registerTarget("/nonexistent-dir-xyz")).toThrow();
 });
 
 test("登録の入力検査", async () => {
+  const t = registerTarget(TARGET);
+  const bg = { title: "  " };
   expect(
-    (await api("POST", "/api/projects", { background: { title: "  " } }))
+    (await api("POST", "/api/projects", { target_id: t.id, background: bg }))
       .status,
   ).toBe(400);
   expect((await api("POST", "/api/projects", {})).status).toBe(400);
+  // 一覧にないフォルダ
+  expect(
+    (
+      await api("POST", "/api/projects", {
+        target_id: "nope",
+        background: { title: "x" },
+      })
+    ).status,
+  ).toBe(404);
   expect((await api("GET", "/api/projects/nope")).status).toBe(404);
 });
 
 test("analyze: 7回の呼び出しで system が同じで、arch が先頭", async () => {
-  const before = readdirSync(config.targetDir).sort();
+  const before = readdirSync(TARGET).sort();
   const { project } = await setup();
   expect(calls.map((c) => c.task).sort()).toEqual([
     "arch",
@@ -55,7 +105,7 @@ test("analyze: 7回の呼び出しで system が同じで、arch が先頭", asy
   ]);
   expect(project.issues[0]?.affected_nodes).toEqual(["api"]);
   expect(project.sim_days).toBe(180);
-  expect(readdirSync(config.targetDir).sort()).toEqual(before);
+  expect(readdirSync(TARGET).sort()).toEqual(before);
 });
 
 test("file: パストラバーサルを拒否する", async () => {

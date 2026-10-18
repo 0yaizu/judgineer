@@ -25,11 +25,11 @@ export const isFile = (path: string) =>
   existsSync(path) && statSync(path).isFile();
 
 /** 検査対象を取り込んで、分析前のプロジェクトを作って保存する */
-export function createProject(bg: Background): Project {
+export function createProject(bg: Background, root: string): Project {
   const id = repo.newId();
   const src = srcDir(id);
   // dataDir が検査対象の中にあっても、コピーが自分自身を取り込まないようにする
-  snapshotTarget(config.targetDir, src, [REPO_ROOT, config.dataDir]);
+  snapshotTarget(root, src, [REPO_ROOT, config.dataDir]);
   cpSync(src, currentDir(id), { recursive: true });
   const project: Project = {
     id,

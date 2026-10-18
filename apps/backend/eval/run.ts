@@ -38,7 +38,7 @@ const t0 = Date.now();
 try {
   for (let r = 1; r <= runs; r++) {
     console.log(`--- run ${r}/${runs} ---`);
-    const pid = createProject(bg).id;
+    const pid = createProject(bg, target).id;
     await analyze(pid);
     if (withDetail)
       for (const i of repo.getProject(pid)?.issues ?? [])

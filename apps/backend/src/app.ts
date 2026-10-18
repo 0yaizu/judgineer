@@ -5,6 +5,7 @@ import { HttpError } from "./http";
 import issues from "./routes/issues";
 import meta from "./routes/meta";
 import projects from "./routes/projects";
+import targets from "./routes/targets";
 
 // DNS rebinding 対策: ブラウザは悪意あるサイトの名前のまま 127.0.0.1 に届けられるので、
 // Host が自分宛て以外なら断る (ポートは見ない。開発時の Vite proxy は元のポートのまま渡す)
@@ -26,10 +27,11 @@ const app = new Hono()
     return c.json({ detail: "サーバーでエラーが起きました" }, 500);
   })
   .get("/health", (c) => {
-    const body: Health = { status: "ok" };
+    const body: Health = { status: "ok", pid: process.pid };
     return c.json(body);
   })
   .route("/", meta)
+  .route("/targets", targets)
   .route("/projects", projects)
   .route("/projects", issues);
 

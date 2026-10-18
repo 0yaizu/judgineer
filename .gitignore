@@ -22,3 +22,4 @@ data/
 handoff/
 
 apps/frontend/src/components/starwind
+dist-bin
