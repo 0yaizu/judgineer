@@ -13,6 +13,7 @@ export type GenerateOpts<T extends z.ZodType> = {
   schema: T;
   model?: string;
   onProgress?: (chars: number) => void; // 書いた文字数
+  onPartial?: (json: string) => void; // 構造化出力 (partial_json) の累積
   signal?: AbortSignal;
 };
 
@@ -179,6 +180,7 @@ export async function generate<T extends z.ZodType>(
     let payload: StreamEvent | undefined;
     let tail = "";
     let written = 0;
+    let partial = "";
     let buf = "";
     const onLine = (line: string) => {
       if (!line.trim()) return;
@@ -190,12 +192,16 @@ export async function generate<T extends z.ZodType>(
         return;
       }
       if (ev.type === "result") payload = ev;
-      else if (ev.type === "stream_event" && o.onProgress) {
+      else if (ev.type === "stream_event") {
         const d = ev.event?.delta;
         const n = (d?.text ?? d?.partial_json ?? "").length;
         if (n) {
           written += n;
-          o.onProgress(written);
+          o.onProgress?.(written);
+        }
+        if (d?.partial_json) {
+          partial += d.partial_json;
+          o.onPartial?.(partial);
         }
       }
     };
