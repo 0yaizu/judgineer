@@ -12,6 +12,7 @@ export const HELP = `judgineer ${version}
   load [ディレクトリ]       そのディレクトリ (省略時は今いる場所) をプロジェクトの一覧に
                            加え、アプリをブラウザで開く。サーバーが止まっていれば起動する
   stop                     サーバーを止める
+  update [--check]         最新のリリースを確認し、新しい版があれば置き換える (--check は確認だけ)
   version                  バージョンを表示する
   help                     このヘルプを表示する (コマンドなしでも表示する)
 
@@ -70,6 +71,14 @@ export async function run(argv: string[]): Promise<number> {
       case "stop":
         await stop();
         return 0;
+      case "update":
+        await (await import("./update")).update(args);
+        return 0;
+      case "migrate": {
+        // 内部用: update が、新しい版でデータベースの更新が通るかを確かめるのに使う
+        await import("../db");
+        return 0;
+      }
       case "serve": {
         // 内部用: start が裏で呼ぶ。サーバーを前面で動かす
         const { serverOptions } = await import("../server");

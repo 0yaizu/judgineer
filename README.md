@@ -72,6 +72,7 @@ judgineer help        # コマンドの一覧
 judgineer load        # 今いるフォルダをプロジェクトの一覧に加えて、ブラウザで開く（ディレクトリも指定できる）
 judgineer start       # サーバーだけを裏で起動する
 judgineer stop        # サーバーを止める
+judgineer update      # 最新のリリースを確認し、新しい版があれば置き換える（--check は確認だけ）
 ```
 
 リリースは `.github/workflows/release.yml` が、公開時に 5 つの OS / CPU 向けの単体バイナリと `SHA256SUMS` を添付する。
