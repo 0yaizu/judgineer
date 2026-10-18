@@ -12,6 +12,7 @@ export const HELP = `judgineer ${version}
   load [ディレクトリ]       そのディレクトリ (省略時は今いる場所) をプロジェクトの一覧に
                            加え、アプリをブラウザで開く。サーバーが止まっていれば起動する
   stop                     サーバーを止める
+  uninstall [-y] [--purge] judgineer を削除する。-y は確認なし、--purge は解析データも消す
   version                  バージョンを表示する
   help                     このヘルプを表示する (コマンドなしでも表示する)
 
@@ -69,6 +70,9 @@ export async function run(argv: string[]): Promise<number> {
         return 0;
       case "stop":
         await stop();
+        return 0;
+      case "uninstall":
+        await (await import("./uninstall")).uninstall(args);
         return 0;
       case "serve": {
         // 内部用: start が裏で呼ぶ。サーバーを前面で動かす

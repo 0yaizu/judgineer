@@ -83,7 +83,7 @@ PATH=/tmp/npm-shim:$PATH bunx --bun starwind@latest add button -y
 - `apps/backend/src/main.ts` が CLI のエントリ。`bun scripts/build-binary.ts [--version vX] [target...]` が、`bun build --compile` で 5 ターゲット（linux-x64 / linux-arm64 / darwin-x64 / darwin-arm64 / windows-x64）の `dist-bin/judgineer-<target>[.exe]` を作る。先に `bun run build` でフロントをビルドしておく。
 - フロントのビルド結果とマイグレーション（`apps/backend/drizzle`）は `assets.tar` として埋め込む。実行時にファイルとして読むもので、import で辿れないため、そのままでは `bun build --compile` に入らない。読み出しは `src/assets.ts`。`src/db/index.ts` が一時フォルダへ書き出して migrate し、`src/server.ts` が `/api` 以外を埋め込みのフロントから返す（無いパスは SPA 用に `_shell.html`）。
 - DB・スナップショットは `~/.judgineer/data`（`JUDGINEER_HOME` で変更）。サーバーの状態は `~/.judgineer/run/`。
-- コマンド: `judgineer help | start | load [dir] | stop | version`。実装は `src/cli/`。`start`/`load` はサーバー（内部コマンド `serve`）を切り離して裏で動かす。
+- コマンド: `judgineer help | start | load [dir] | stop | uninstall [-y] [--purge] | version`。実装は `src/cli/`。`start`/`load` はサーバー（内部コマンド `serve`）を切り離して裏で動かす。
 - インストールは `install.sh`（`curl ... | bash`）。リリースの最新から 5 件までさかのぼり、この OS 向けのバイナリと `SHA256SUMS` がそろった最初のものを使い、照合する。`SHA256SUMS` が無いリリースは使わない。空でなく judgineer のものでもないフォルダには入れない。
 - `scripts/smoke-binary.sh` が、ビルドしたバイナリの起動・GUI 配信・`load` を確かめる（CI でも実行）。
 - Windows 向けは、クロスコンパイルできることまでしか確認していない（実機では未検証）。

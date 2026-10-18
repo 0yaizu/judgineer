@@ -11,6 +11,7 @@
     "start": "bun src/index.ts",
     "typecheck": "tsc -p .",
     "test": "bun test",
+    "eval": "bun run eval/run.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio"

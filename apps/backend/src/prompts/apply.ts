@@ -34,7 +34,7 @@ export function applyPrompt(a: {
     issue_id: f.id,
     day: f.day,
     title: f.title,
-    what_happens: f.what_happens,
+    what_happens: f.what_happens || undefined, // 未生成なら省く
   }));
   return [
     "若手エンジニアが修正案を選びました。この修正を反映した結果を作ってください。",

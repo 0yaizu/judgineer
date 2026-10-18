@@ -6,6 +6,7 @@ import type {
 } from "@tka/shared";
 import {
   backgroundText,
+  causeText,
   type Evidence,
   evidenceText,
   type IssueView,
@@ -70,7 +71,7 @@ export function chatSystem(a: {
     tag("evidence", evidenceText(a.evidence)),
     tag(
       "cause",
-      `${a.issue.title}\n${a.issue.what_happens}\n影響を受ける人: ${a.issue.who_is_affected}`,
+      `${causeText(a.issue)}\n影響を受ける人: ${a.issue.who_is_affected}`,
     ),
   ];
   if (a.attack?.length) {
