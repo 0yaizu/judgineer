@@ -1,4 +1,4 @@
-import { IconX } from "@tabler/icons-react";
+import { IconPlayerStopFilled } from "@tabler/icons-react";
 import { useState } from "react";
 import { api } from "#/lib/api";
 
@@ -17,10 +17,10 @@ export function CancelButton({ pid }: { pid: string }) {
         // 止められなかったときは、また押せるようにする
         api.cancel(pid).catch(() => setStopping(false));
       }}
-      className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs text-sub transition-colors hover:border-error/50 hover:text-error disabled:pointer-events-none disabled:opacity-60"
+      className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full border border-error/50 bg-background px-4 text-sm font-medium text-error shadow-xs transition-colors hover:bg-error hover:text-error-foreground disabled:pointer-events-none disabled:opacity-60"
     >
-      <IconX className="size-3.5" />
-      {stopping ? "止めています…" : "キャンセル"}
+      <IconPlayerStopFilled className="size-4" />
+      {stopping ? "止めています…" : "生成をキャンセル"}
     </button>
   );
 }

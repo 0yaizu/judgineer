@@ -141,6 +141,7 @@ function Register() {
   const [busyPid, setBusyPid] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     api
@@ -186,23 +187,22 @@ function Register() {
   };
 
   const submit = async () => {
+    if (!target) return;
     setBusy(true);
     setError("");
-    let pid: string | undefined;
+    setNotice("");
     try {
-      if (!target) return;
       const p = await api.createProject(target.id, bg);
-      pid = p.id;
       setBusyPid(p.id);
       await api.analyze(p.id);
       navigate({ to: "/p/$pid", params: { pid: p.id } });
     } catch (e) {
-      // 台本づくりをキャンセルしたら、セッションの画面へ（台本はそこから作り直せる）
-      if (e instanceof Cancelled && pid) {
-        navigate({ to: "/p/$pid", params: { pid } });
-        return;
-      }
-      setError((e as Error).message);
+      // キャンセルは自分で止めたので、エラーにせず、この画面のまま入力を残す
+      if (e instanceof Cancelled)
+        setNotice(
+          "台本づくりをキャンセルしました。入力はそのまま残っているので、もう一度作れます。",
+        );
+      else setError((e as Error).message);
       setBusy(false);
       setBusyPid(null);
     }
@@ -390,6 +390,11 @@ function Register() {
             className={`${panelClass} grid gap-4 bg-gradient-to-br from-card to-tint p-6`}
           >
             <ErrorBox message={error} />
+            {notice && !busy && (
+              <p className="rounded-xl bg-muted px-4 py-3 text-sm text-sub">
+                {notice}
+              </p>
+            )}
             {busy ? (
               <Waiting
                 text={

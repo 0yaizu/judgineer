@@ -90,8 +90,12 @@ export function Waiting({
           <span>{info.chars.toLocaleString()}文字</span>
         )}
         <span>経過{sec}秒</span>
-        {cancelPid && <CancelButton pid={cancelPid} />}
       </output>
+      {cancelPid && (
+        <div>
+          <CancelButton pid={cancelPid} />
+        </div>
+      )}
       {progressError && (
         <p className="text-sm text-warning">
           進捗の取得が一時的に途切れています。自動で再接続します。
