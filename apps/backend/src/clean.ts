@@ -1,4 +1,11 @@
-import { type Architecture, type Flow, NODE_KINDS } from "@tka/shared";
+import {
+  type Architecture,
+  type Flow,
+  type IssueOutline,
+  NODE_KINDS,
+  type Signal,
+} from "@tka/shared";
+import type { Finding } from "./scanner";
 import type { IfIgnored, IssueData } from "./types";
 
 // AI の出力を信用しすぎないための整形。共有スキーマは day などの範囲を見ないので、丸めはここで行う
@@ -79,10 +86,30 @@ export function cleanIfIgnored(
     after_days: ii.impact === "escalate" ? Math.max(7, Math.min(90, after)) : 0,
     incident_title: title,
     incident_story: String(ii.incident_story ?? ""),
-    signals: (ii.signals ?? [])
-      .filter((s) => s && typeof s === "object")
-      .slice(0, 8),
+    signals: cleanSignals(ii.signals),
   };
+}
+
+const TIME_RE = /(?<!\d)([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?(?!\d)/;
+
+/** time を HH:MM:SS に直す。取り出せなければ text から探し、それでも無ければ捨てる。最大8件 */
+export function cleanSignals(signals: Signal[] | null | undefined): Signal[] {
+  const out: Signal[] = [];
+  for (const s of signals ?? []) {
+    if (!s || typeof s !== "object") continue;
+    const text = String(s.text ?? "");
+    if (!text.trim()) continue;
+    const m = TIME_RE.exec(String(s.time ?? "")) ?? TIME_RE.exec(text);
+    if (!m) continue;
+    out.push({
+      time: `${m[1]?.padStart(2, "0")}:${m[2]}:${m[3] ?? "00"}`,
+      source: String(s.source ?? ""),
+      level: s.level === "warn" || s.level === "error" ? s.level : "info",
+      text,
+    });
+    if (out.length === 8) break;
+  }
+  return out;
 }
 
 const NO_FOLLOWUP = (reason: string): IfIgnored => ({
@@ -142,6 +169,27 @@ export function ifIgnoredFor(
         text: "「これ、前に見送ったやつと同じ原因じゃない？」",
       },
     ],
+  };
+}
+
+/** AI が分類しきれなかった finding を、機械で issue の骨組みにする (落とすより雑でも残す) */
+export function fallbackOutline(f: Finding, day: number): IssueOutline {
+  return {
+    finding_ids: [f.id],
+    day,
+    incident_title: `「${f.title}」が運用中に問題として表に出た`,
+    view: "code",
+    affected_nodes: [],
+    title: f.title,
+    category: "脆弱性",
+    severity: "中",
+    // cleanIfIgnored が null にする形 (ifIgnoredFor のフォールバックが働く)
+    if_ignored: {
+      impact: "escalate",
+      reason: "",
+      after_days: 0,
+      incident_title: "",
+    },
   };
 }
 
