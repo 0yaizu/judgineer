@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HELP, run } from "../src/cli";
+import { RC_BEGIN, RC_END, stripRcBlock } from "../src/cli/rc";
 import { ensureServer, isUp, stopServer } from "../src/cli/server";
 import { appHome, config } from "../src/config";
 
@@ -22,7 +23,30 @@ test("コマンドなし・help・不明なコマンド", async () => {
   }
   expect(logs).toEqual([HELP, HELP]);
   expect(errs[0]).toContain("不明なコマンド: nope");
-  for (const c of ["start", "load", "stop", "help"]) expect(HELP).toContain(c);
+  for (const c of ["start", "load", "stop", "uninstall", "help"])
+    expect(HELP).toContain(c);
+});
+
+test("stripRcBlock: 印の間だけを消す", () => {
+  const rc = `export A=1\n\n${RC_BEGIN}\nexport PATH=x:$PATH\n${RC_END}\nexport B=2\n`;
+  expect(stripRcBlock(rc)).toBe("export A=1\nexport B=2\n");
+});
+
+test("stripRcBlock: 印が無ければ null、終わりが無ければ消さずに throw", () => {
+  expect(stripRcBlock("export A=1\n")).toBeNull();
+  expect(() => stripRcBlock(`a\n${RC_BEGIN}\nkeep me\n`)).toThrow();
+});
+
+test("uninstall は開発中の実行では拒否する", async () => {
+  const errs: string[] = [];
+  const err = console.error;
+  console.error = (...a) => void errs.push(a.join(" "));
+  try {
+    expect(await run(["uninstall", "-y"])).toBe(1);
+  } finally {
+    console.error = err;
+  }
+  expect(errs[0]).toContain("インストール版");
 });
 
 // 実際にサーバーを起動するテスト。空きポートを使い、終わったら必ず止める
