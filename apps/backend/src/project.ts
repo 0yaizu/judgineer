@@ -1,9 +1,11 @@
-import { existsSync, statSync } from "node:fs";
+import { cpSync, existsSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
-import { type GeneratedIssue as Incident, SIM_DAYS } from "@tka/shared";
-import { config } from "./config";
+import { type Background, type Incident, SIM_DAYS } from "@tka/shared";
+import { cleanSignals } from "./clean";
+import { config, REPO_ROOT } from "./config";
 import { HttpError } from "./http";
 import * as repo from "./repo";
+import { extractFeatures, scan, snapshotTarget } from "./scanner";
 import type { Issue, Lesson, Project } from "./types";
 
 const projectDir = (pid: string) => join(config.dataDir, "projects", pid);
@@ -21,6 +23,33 @@ export function inside(root: string, rel: string): string | null {
 
 export const isFile = (path: string) =>
   existsSync(path) && statSync(path).isFile();
+
+/** 検査対象を取り込んで、分析前のプロジェクトを作って保存する */
+export function createProject(bg: Background): Project {
+  const id = repo.newId();
+  const src = srcDir(id);
+  // dataDir が検査対象の中にあっても、コピーが自分自身を取り込まないようにする
+  snapshotTarget(config.targetDir, src, [REPO_ROOT, config.dataDir]);
+  cpSync(src, currentDir(id), { recursive: true });
+  const project: Project = {
+    id,
+    created_at: repo.now(),
+    background: bg,
+    source: "target",
+    findings: scan(src),
+    features: extractFeatures(src),
+    issues: [],
+    architecture: { nodes: [], edges: [] },
+    flows: [],
+    dismissed: [],
+    uncovered_features: [],
+    assumed_users: null,
+    sim_day: 0,
+    analyzed_by: null,
+  };
+  repo.saveProject(project);
+  return project;
+}
 
 export function loadProject(pid: string): Project {
   const p = repo.getProject(pid);
@@ -41,7 +70,7 @@ export function nextIssueId(p: Project): string {
 
 /** AI が作った出来事から、保存する項目を取り出す (affected_nodes は構成図にあるものだけ) */
 export function incidentFields(
-  it: Omit<Incident, "finding_ids" | "if_ignored" | "day">,
+  it: Omit<Incident, "day">,
   nodeIds: Set<string>,
 ) {
   return {
@@ -54,7 +83,7 @@ export function incidentFields(
     incident_title: it.incident_title,
     incident_story: it.incident_story,
     view: it.view,
-    signals: it.signals.slice(0, 8),
+    signals: cleanSignals(it.signals),
     affected_nodes: it.affected_nodes.filter((a) => nodeIds.has(a)),
   };
 }
