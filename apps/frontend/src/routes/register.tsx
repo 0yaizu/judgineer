@@ -16,7 +16,7 @@ import { Input } from "#/components/starwind/input";
 import { Label } from "#/components/starwind/label";
 import { Textarea } from "#/components/starwind/textarea";
 import { Waiting } from "#/components/Waiting";
-import { api } from "#/lib/api";
+import { api, Cancelled } from "#/lib/api";
 import type { AppSummary, Background, Target } from "#/lib/types";
 
 export const Route = createFileRoute("/register")({
@@ -188,13 +188,20 @@ function Register() {
   const submit = async () => {
     setBusy(true);
     setError("");
+    let pid: string | undefined;
     try {
       if (!target) return;
       const p = await api.createProject(target.id, bg);
+      pid = p.id;
       setBusyPid(p.id);
       await api.analyze(p.id);
       navigate({ to: "/p/$pid", params: { pid: p.id } });
     } catch (e) {
+      // 台本づくりをキャンセルしたら、セッションの画面へ（台本はそこから作り直せる）
+      if (e instanceof Cancelled && pid) {
+        navigate({ to: "/p/$pid", params: { pid } });
+        return;
+      }
       setError((e as Error).message);
       setBusy(false);
       setBusyPid(null);
@@ -391,6 +398,7 @@ function Register() {
                     : "コードを調べています"
                 }
                 pid={busyPid ?? undefined}
+                cancelPid={busyPid ?? undefined}
               />
             ) : (
               <div className="flex flex-wrap items-center gap-x-5 gap-y-3">

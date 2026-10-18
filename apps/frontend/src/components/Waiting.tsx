@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArchDiagram } from "#/components/ArchDiagram";
+import { CancelButton } from "#/components/CancelButton";
 import { type LogLine, LogView } from "#/components/LogView";
 import { Spinner } from "#/components/starwind/spinner";
 import { api } from "#/lib/api";
@@ -14,10 +15,13 @@ export function Waiting({
   text,
   pid,
   iid,
+  cancelPid,
 }: {
   text: string;
   pid?: string;
   iid?: string;
+  /** 渡すと、このセッションの AI の生成を止めるキャンセルボタンを出す */
+  cancelPid?: string;
 }) {
   const [sec, setSec] = useState(0);
   const [info, setInfo] = useState<Progress | null>(null);
@@ -86,6 +90,7 @@ export function Waiting({
           <span>{info.chars.toLocaleString()}文字</span>
         )}
         <span>経過{sec}秒</span>
+        {cancelPid && <CancelButton pid={cancelPid} />}
       </output>
       {progressError && (
         <p className="text-sm text-warning">
