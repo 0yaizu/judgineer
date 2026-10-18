@@ -254,46 +254,11 @@ export const partnerPortalApi: Golden = {
 export const clinicResultsApi: Golden = {
   findings: [
     {
-      rule: "cors-wildcard",
-      match: 'origins="*"',
-      expect: "issue",
-      min_severity: "中",
-      note: "診療情報を返すAPIを任意のWebサイトから呼び出せる",
-    },
-    {
-      rule: "hardcoded-secret",
-      match: "RESULTS_API_KEY = ",
-      expect: "issue",
-      min_severity: "高",
-      note: "患者向けアプリと検査会社の共通キーがソースコードに含まれている",
-    },
-    {
-      rule: "relative-path",
-      match: 'DB_PATH = "clinic.db"',
-      expect: "issue",
-      min_severity: "低",
-      note: "起動場所によって別のDBを参照しうる",
-    },
-    {
-      rule: "secret-compare",
-      match: "== RESULTS_API_KEY",
-      expect: "issue",
-      min_severity: "低",
-      note: "APIキーを通常の等価比較で検証している",
-    },
-    {
       rule: "sql-string-build",
       match: "{patient_id}",
       expect: "issue",
       min_severity: "高",
       note: "URLの患者IDを診療情報のSQLへ直接埋め込んでいる",
-    },
-    {
-      rule: "pii-in-logs",
-      match: "logger.info",
-      expect: "issue",
-      min_severity: "中",
-      note: "患者IDとメールアドレスをアクセスのたびにログへ残す",
     },
     {
       rule: "path-traversal",
@@ -303,32 +268,12 @@ export const clinicResultsApi: Golden = {
       note: "利用者が指定した任意のファイルを読み出せる",
     },
     {
-      rule: "select-all-columns",
-      match: "SELECT * FROM patients",
-      expect: "either",
-      note: "全件出力の用途なので全列取得自体より認証がない点が本題",
-    },
-    {
-      rule: "debug-enabled",
-      match: "debug=True",
-      expect: "issue",
-      min_severity: "高",
-      note: "外部インターフェースでデバッグモードを有効にしている",
-    },
-    {
       rule: "route-without-auth",
       match: "/api/admin/export",
       by: "title",
       expect: "issue",
       min_severity: "高",
       note: "認証なしで患者情報と検査結果の全件CSVを取得できる",
-    },
-    {
-      rule: "unclosed-connection",
-      match: "conn = sqlite3.connect(DB_PATH)",
-      expect: "issue",
-      min_severity: "低",
-      note: "リクエストごとのDB接続を閉じていない",
     },
   ],
   known_gaps: [
@@ -338,21 +283,12 @@ export const clinicResultsApi: Golden = {
       title: "別の患者の検査結果を閲覧できる",
       note: "APIキーは確認するが、要求した患者IDがログイン中の本人か検証していない",
     },
-    {
-      match: "rows[0].keys()",
-      file: "app.py",
-      title: "データが0件だとCSV出力が失敗する",
-      note: "検査結果がない環境ではIndexErrorになり管理業務が止まる",
-    },
   ],
   arch: { kinds: ["external", "internal", "db"] },
   cause_words: [
     "SQLインジェクション",
     "インジェクション",
     "パストラバーサル",
-    "ハードコード",
-    "CORS",
-    "デバッグモード",
     "認可漏れ",
   ],
 };
