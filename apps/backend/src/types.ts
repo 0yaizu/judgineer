@@ -167,8 +167,9 @@ export type ProjectSummary = {
   id: string;
   title: string;
   created_at: string;
-  issues: number;
+  issues: number; // 先の出来事も含む総数。画面に出すとネタバレになる
   decided: number;
+  sim_day: number; // 運用を何日目まで進めたか
 };
 
 export type AppSummary = {

@@ -177,6 +177,7 @@ test("listProjects は新しい順で、件数と対応済み数を返す", () =
     created_at: "2999-01-01T00:00:00Z",
     issues: 2,
     decided: 1,
+    sim_day: p.sim_day,
   });
 });
 
