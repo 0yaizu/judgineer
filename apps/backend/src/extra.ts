@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { type ExtraCandidate, extraFindingsResultSchema } from "@tka/shared";
-import { generate } from "./ai/client";
+import { CancelledError, generate } from "./ai/client";
 import { inside, isFile } from "./project";
 import { extraFindingsPrompt } from "./prompts/analyze";
 import { CODE_EXT, type Finding, snippet, splitLines } from "./scanner";
@@ -80,6 +80,11 @@ export async function extraFindings(a: {
       }),
     ),
   );
+  // キャンセルは失敗ではないので、飲み込まずに伝える (台本づくりごと止める)
+  const cancelled = results.find(
+    (r) => r.status === "rejected" && r.reason instanceof CancelledError,
+  );
+  if (cancelled?.status === "rejected") throw cancelled.reason;
   const ok = results.filter((r) => r.status === "fulfilled");
   if (ok.length === 0) {
     console.warn(

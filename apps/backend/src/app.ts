@@ -1,6 +1,7 @@
 import type { Health } from "@tka/shared";
 import { Hono } from "hono";
-import { AIError } from "./ai/client";
+import { AIError, CancelledError } from "./ai/client";
+import { inSession } from "./ai/session";
 import { HttpError } from "./http";
 import apps from "./routes/apps";
 import issues from "./routes/issues";
@@ -21,7 +22,11 @@ const app = new Hono()
       throw new HttpError(403, "このホスト名ではアクセスできません");
     await next();
   })
+  // セッション (プロジェクト) ごとの処理として動かし、キャンセルで AI の生成をまとめて止められるようにする
+  .use("/projects/:pid/*", (c, next) => inSession(c.req.param("pid"), next))
   .onError((e, c) => {
+    if (e instanceof CancelledError)
+      return c.json({ detail: e.message, cancelled: true }, 409);
     if (e instanceof AIError) return c.json({ detail: e.message }, 502);
     if (e instanceof HttpError) return c.json({ detail: e.message }, e.status);
     console.error(e);

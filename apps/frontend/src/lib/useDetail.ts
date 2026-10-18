@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "./api";
+import { api, Cancelled } from "./api";
 import type { Issue, ProjectView } from "./types";
 
 /** 出来事の本文が未生成 (空文字) なら、表示する前に作らせて project に反映する */
@@ -30,7 +30,15 @@ export function useDetail(
           issues: cur.issues.map((i) => (i.id === d.id ? d : i)),
         });
       })
-      .catch((e: Error) => live && setError(e.message));
+      .catch(
+        (e: Error) =>
+          live &&
+          setError(
+            e instanceof Cancelled
+              ? "出来事の詳細づくりをキャンセルしました。もう一度試すと、作り直します。"
+              : e.message,
+          ),
+      );
     return () => {
       live = false;
     };
