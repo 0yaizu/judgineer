@@ -3,6 +3,7 @@ import {
   IconBulb,
   IconPlayerPlayFilled,
   IconSend,
+  IconSparkles,
 } from "@tabler/icons-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -185,8 +186,9 @@ function IssuePage({
   const [plan, setPlan] = useState(initial.plan_draft?.plan ?? "");
   const [busy, setBusy] = useState<Busy>("");
   const [error, setError] = useState("");
+  // 修正の結果が一番見てほしいところなので、あればそれを最初に開く
   const [tab, setTab] = useState<Tab>(
-    initial.view === "infra" ? "infra" : "code",
+    initial.fix ? "fix" : initial.view === "infra" ? "infra" : "code",
   );
   const listRef = useRef<HTMLDivElement>(null);
   const [awayFromEnd, setAwayFromEnd] = useState(false);
@@ -348,6 +350,7 @@ function IssuePage({
       );
       setIssue(r.issue);
       onProject(r.project);
+      setTab("fix");
     });
 
   const skip = (reason: string) =>
@@ -504,8 +507,18 @@ function IssuePage({
                 <span className={TAB_COUNT}>{issue.signals.length}</span>
               </TabsTrigger>
               {issue.fix && (
-                <TabsTrigger value="fix" className={TAB_CLASS}>
+                <TabsTrigger
+                  value="fix"
+                  className={`${TAB_CLASS} font-medium text-primary data-[state=active]:text-primary`}
+                >
+                  <IconSparkles className="size-4" />
                   修正の結果
+                  {tab !== "fix" && (
+                    <span aria-hidden className="relative flex size-2">
+                      <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
+                      <span className="relative inline-flex size-2 rounded-full bg-primary" />
+                    </span>
+                  )}
                 </TabsTrigger>
               )}
             </TabsList>
