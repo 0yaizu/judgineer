@@ -5,7 +5,7 @@
 AIが当たり前の時代に、根拠を持って判断できるエンジニアになるための経験を積むプロダクト。
 
 - デモ動画：（準備中）
-- 発表スライド：（準備中）
+- 説明スライド：[ジャッジニア 説明資料](https://claude.ai/artifact/FAm2Hq4rvFu8svkY4LQvxk)
 
 ## すぐに試す
 Linux、macOS、Windows（Git Bash）で動きます。AIの機能にはClaude Codeを使うので、先に`claude`コマンドをインストールしてログインしておいてください。
