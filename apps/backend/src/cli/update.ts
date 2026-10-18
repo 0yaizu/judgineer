@@ -150,9 +150,16 @@ function checkMigration(bin: string, backup: string | null): void {
     );
 }
 
+/** 消せなくても続ける。force は「無い」場合しか無視せず、Windows の動作中ファイルは EPERM / EBUSY で投げる */
+function tryRm(path: string): void {
+  try {
+    rmSync(path, { force: true });
+  } catch {}
+}
+
 /** 前回の更新で残った古い実行ファイルを片付ける (Windows は動作中に消せないため、次の実行で消す) */
 export function cleanupOldBinary(): void {
-  if (compiled) rmSync(`${process.execPath}.old`, { force: true });
+  if (compiled) tryRm(`${process.execPath}.old`);
 }
 
 export async function update(args: string[]): Promise<void> {
@@ -223,7 +230,7 @@ export async function update(args: string[]): Promise<void> {
 
     // 動作中の実行ファイルも名前の変更はできる (Windows でも)
     const old = `${bin}.old`;
-    rmSync(old, { force: true });
+    tryRm(old);
     renameSync(bin, old);
     try {
       renameSync(staged, bin);
@@ -231,7 +238,7 @@ export async function update(args: string[]): Promise<void> {
       renameSync(old, bin);
       throw e;
     }
-    rmSync(old, { force: true }); // Windows では動作中なので消せない。次の実行で消す
+    tryRm(old); // Windows では動作中なので消せない。次の実行で消す
     writeFileSync(join(appHome, "version"), `${rel.tag}\n`);
     console.log(`更新しました: ${rel.tag}`);
     console.log("データベースは、次の起動時に自動で新しい版へ更新されます");
