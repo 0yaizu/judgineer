@@ -36,11 +36,15 @@ export type AIConfig = {
   provider: string;
   label: string;
   status: { ok: boolean; detail: string };
-  target: { dir: string; exists: boolean };
 };
 
+/** judgineer load で読み込んだ、検査するフォルダ */
 export type Target = {
-  dir: string;
+  id: string;
+  path: string;
+  name: string;
+  created_at: string;
+  last_loaded_at: string;
   exists: boolean;
   background: Partial<Background> | null;
 };

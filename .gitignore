@@ -19,3 +19,4 @@ dist-ssr
 data/
 
 apps/frontend/src/components/starwind
+dist-bin

@@ -1,4 +1,4 @@
-import { cpSync, existsSync, readFileSync, statSync } from "node:fs";
+import { cpSync, readFileSync } from "node:fs";
 import { type Background, backgroundSchema, SIM_DAYS } from "@tka/shared";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -16,6 +16,7 @@ import {
 } from "../project";
 import * as repo from "../repo";
 import { extractFeatures, scan, snapshotTarget } from "../scanner";
+import { isDir } from "../targets";
 import type { Project } from "../types";
 
 const BG_KEYS = Object.keys(backgroundSchema.shape) as (keyof Background)[];
@@ -23,10 +24,15 @@ const BG_KEYS = Object.keys(backgroundSchema.shape) as (keyof Background)[];
 export default new Hono()
   .get("/", (c) => c.json(repo.listProjects()))
   .post("/", async (c) => {
-    const { background } = await readBody(
+    const { target_id, background } = await readBody(
       c,
-      z.object({ background: z.record(z.string(), z.unknown()) }),
+      z.object({
+        target_id: z.string(),
+        background: z.record(z.string(), z.unknown()),
+      }),
     );
+    const target = repo.getTarget(target_id);
+    if (!target) throw new HttpError(404, "検査するフォルダが見つかりません");
     const bg = Object.fromEntries(
       BG_KEYS.map((k) => {
         const v = background[k];
@@ -34,16 +40,16 @@ export default new Hono()
       }),
     ) as Background;
     if (!bg.title) throw new HttpError(400, "アプリ名を入力してください");
-    if (
-      !existsSync(config.targetDir) ||
-      !statSync(config.targetDir).isDirectory()
-    )
-      throw new HttpError(500, "検査対象のフォルダが見つかりません");
+    if (!isDir(target.path))
+      throw new HttpError(
+        400,
+        `検査対象のフォルダが見つかりません: ${target.path}`,
+      );
 
     const id = repo.newId();
     const src = srcDir(id);
     // dataDir が検査対象の中にあっても、コピーが自分自身を取り込まないようにする
-    snapshotTarget(config.targetDir, src, [REPO_ROOT, config.dataDir]);
+    snapshotTarget(target.path, src, [REPO_ROOT, config.dataDir]);
     cpSync(src, currentDir(id), { recursive: true });
     const project: Project = {
       id,

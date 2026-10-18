@@ -11,3 +11,5 @@ process.env.TARGET_DIR = resolve(
 );
 // 実際の claude を呼ばない
 process.env.CLAUDE_BIN = "/nonexistent/claude";
+// judgineer のコマンドが本物のホームに触らないようにする
+process.env.JUDGINEER_HOME = join(process.env.DATA_DIR, "home");

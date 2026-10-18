@@ -161,3 +161,12 @@ export type ProjectSummary = {
   issues: number;
   decided: number;
 };
+
+/** judgineer load で読み込んだ検査対象のフォルダ */
+export type Target = {
+  id: string;
+  path: string;
+  name: string;
+  created_at: string;
+  last_loaded_at: string;
+};

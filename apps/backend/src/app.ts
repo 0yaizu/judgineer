@@ -5,6 +5,7 @@ import { HttpError } from "./http";
 import issues from "./routes/issues";
 import meta from "./routes/meta";
 import projects from "./routes/projects";
+import targets from "./routes/targets";
 
 // ルートはチェーンで繋ぐ（AppType がフロントの hc<AppType> に型を渡す）
 const app = new Hono()
@@ -16,10 +17,11 @@ const app = new Hono()
     return c.json({ detail: "サーバーでエラーが起きました" }, 500);
   })
   .get("/health", (c) => {
-    const body: Health = { status: "ok" };
+    const body: Health = { status: "ok", pid: process.pid };
     return c.json(body);
   })
   .route("/", meta)
+  .route("/targets", targets)
   .route("/projects", projects)
   .route("/projects", issues);
 

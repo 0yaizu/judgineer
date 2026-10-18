@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { z } from "zod";
 import { type GenerateOpts, type generate, setAI } from "../../src/ai/client";
 import app from "../../src/app";
-import { config } from "../../src/config";
+import { registerTarget } from "../../src/targets";
 import type { Issue, Lesson, Project } from "../../src/types";
 
 export type Payload = Project & { sim_days: number; related_lessons: Lesson[] };
@@ -13,7 +13,9 @@ export type Payload = Project & { sim_days: number; related_lessons: Lesson[] };
 // 他モジュールから代入できないので、再代入せず length = 0 で空にする
 export const calls: { task: string; system: string }[] = [];
 export const findingIds: string[] = [];
-export const appPy = readFileSync(join(config.targetDir, "app.py"), "utf8");
+/** 検査対象 (test/setup.ts が固定する) */
+export const TARGET = process.env.TARGET_DIR as string;
+export const appPy = readFileSync(join(TARGET, "app.py"), "utf8");
 const debugLine =
   appPy.split("\n").findIndex((l) => l.includes("debug=True")) + 1;
 
@@ -251,12 +253,15 @@ export async function api<T = Payload>(
 }
 
 export async function setup() {
-  const target = await api<{ background: Record<string, string> }>(
+  // judgineer load と同じく、検査対象の一覧に足してから登録する
+  const target = registerTarget(TARGET);
+  const list = await api<{ id: string; background: Record<string, string> }[]>(
     "GET",
-    "/api/target",
+    "/api/targets",
   );
   const reg = await api("POST", "/api/projects", {
-    background: target.data.background,
+    target_id: target.id,
+    background: list.data.find((t) => t.id === target.id)?.background,
   });
   expect(reg.status).toBe(200);
   findingIds.length = 0;

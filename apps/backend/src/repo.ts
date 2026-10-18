@@ -1,7 +1,13 @@
-import { and, asc, desc, eq, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, notInArray, sql } from "drizzle-orm";
 import { db } from "./db";
-import { issues, lessons, messages, projects } from "./db/schema";
-import type { ChatMessage, Lesson, Project, ProjectSummary } from "./types";
+import { apps, issues, lessons, messages, projects } from "./db/schema";
+import type {
+  ChatMessage,
+  Lesson,
+  Project,
+  ProjectSummary,
+  Target,
+} from "./types";
 
 export const newId = (): string =>
   crypto.randomUUID().replaceAll("-", "").slice(0, 10);
@@ -203,4 +209,58 @@ export function addLesson(l: Lesson): void {
 
 export function removeLesson(id: string): void {
   db.delete(lessons).where(eq(lessons.id, id)).run();
+}
+
+const toTarget = (r: typeof apps.$inferSelect): Target => ({
+  id: r.id,
+  path: r.path ?? "",
+  name: r.name,
+  created_at: r.createdAt,
+  last_loaded_at: r.updatedAt,
+});
+
+/** judgineer load で読み込んだ (path のある) アプリを、最近読み込んだ順に */
+export function listTargets(): Target[] {
+  return db
+    .select()
+    .from(apps)
+    .where(isNotNull(apps.path))
+    .orderBy(desc(apps.updatedAt), desc(apps.createdAt))
+    .all()
+    .map(toTarget);
+}
+
+export function getTarget(id: string): Target | undefined {
+  const r = db
+    .select()
+    .from(apps)
+    .where(and(eq(apps.id, id), isNotNull(apps.path)))
+    .get();
+  return r && toTarget(r);
+}
+
+/** path が同じものがあれば、読み込んだ日時だけ更新して返す */
+export function upsertTarget(path: string, name: string): Target {
+  const at = now();
+  return toTarget(
+    db
+      .insert(apps)
+      .values({ id: newId(), path, name, createdAt: at, updatedAt: at })
+      .onConflictDoUpdate({ target: apps.path, set: { updatedAt: at } })
+      .returning()
+      .get(),
+  );
+}
+
+/** 一覧から外す。登録済みの背景があるアプリは消さず、フォルダの紐づけだけ外す */
+export function removeTarget(id: string): boolean {
+  const r = getTarget(id);
+  if (!r) return false;
+  const row = db.select().from(apps).where(eq(apps.id, id)).get();
+  if (row?.background) {
+    db.update(apps).set({ path: null }).where(eq(apps.id, id)).run();
+  } else {
+    db.delete(apps).where(eq(apps.id, id)).run();
+  }
+  return true;
 }
