@@ -89,7 +89,9 @@ export async function uninstall(args: string[]): Promise<void> {
     rmSync(join(appHome, p), { recursive: true, force: true });
   if (purge && dataInHome)
     rmSync(config.dataDir, { recursive: true, force: true });
-  rmSync(MARKER, { force: true });
+  // データを残すなら目印も残す。消すと、再インストール時に judgineer の場所だと判別できず断られる
+  if (!(dataInHome && existsSync(config.dataDir)))
+    rmSync(MARKER, { force: true });
 
   if (process.platform === "win32") {
     // 動いている exe 自身は消せないので、終了を待ってから別のプロセスに消してもらう
