@@ -21,7 +21,7 @@ import {
 import { Button, ButtonVariants } from "#/components/starwind/button";
 import { Spinner } from "#/components/starwind/spinner";
 import { Waiting } from "#/components/Waiting";
-import { api } from "#/lib/api";
+import { api, Cancelled } from "#/lib/api";
 import {
   chosenLabel,
   type IssueState,
@@ -311,7 +311,8 @@ function Simulation({
     try {
       onChange(await api.analyze(pid));
     } catch (e) {
-      setError((e as Error).message);
+      // キャンセルは自分で止めたので、エラーとしては出さない
+      if (!(e instanceof Cancelled)) setError((e as Error).message);
     }
     setBusy(false);
   };
@@ -397,10 +398,10 @@ function Simulation({
           {noScript ? (
             <CalmCard title="運用の台本がまだありません">
               <p>
-                台本づくりが途中で止まったようです。作り直すと再生できます（1〜2分）。
+                台本づくりが途中で止まったか、キャンセルされました。作り直すと再生できます（1〜2分）。
               </p>
               {busy ? (
-                <Waiting text="台本を作っています" pid={pid} />
+                <Waiting text="台本を作っています" pid={pid} cancelPid={pid} />
               ) : (
                 <Button variant="primary" onClick={reanalyze}>
                   台本を作り直す
@@ -422,6 +423,7 @@ function Simulation({
                   text="出来事の詳細を書いています"
                   pid={pid}
                   iid={current.id}
+                  cancelPid={pid}
                 />
               ) : detail.error ? (
                 <>

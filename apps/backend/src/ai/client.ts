@@ -3,8 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { config } from "../config";
+import { AIError, CancelledError } from "./errors";
+import { aiSignal } from "./session";
 
-export class AIError extends Error {}
+export { AIError, CancelledError };
 
 export type GenerateOpts<T extends z.ZodType> = {
   task: string; // ログ用の識別子
@@ -130,8 +132,28 @@ export function setAI(fn: typeof generate | null): void {
 export async function generate<T extends z.ZodType>(
   o: GenerateOpts<T>,
 ): Promise<z.infer<T>> {
-  if (override) return override(o);
+  // セッションのキャンセル (画面のキャンセルボタン) でも、呼び出し側の signal でも止まる
+  const job = aiSignal(o.signal);
+  try {
+    if (override) {
+      const res = await override({ ...o, signal: job.signal });
+      if (job.cancelled()) throw new CancelledError();
+      return res;
+    }
+    return await spawnClaude({ ...o, signal: job.signal }, job.cancelled);
+  } catch (e) {
+    // プロセスを止めたことで起きた失敗は、どんなエラーでもキャンセルとして返す
+    if (job.cancelled()) throw new CancelledError();
+    throw e;
+  } finally {
+    job.done();
+  }
+}
 
+async function spawnClaude<T extends z.ZodType>(
+  o: GenerateOpts<T>,
+  cancelled: () => boolean,
+): Promise<z.infer<T>> {
   const timeoutSec = config.aiTimeoutSec;
   // 空のフォルダで実行し、手元のプロジェクト設定 (CLAUDE.md など) を読ませない
   const dir = mkdtempSync(join(tmpdir(), "tka-ai-"));
@@ -224,6 +246,7 @@ export async function generate<T extends z.ZodType>(
         `Claude Code の応答が ${timeoutSec} 秒以内に返ってきませんでした`,
       );
     }
+    if (cancelled()) throw new CancelledError();
     if (o.signal?.aborted) throw new AIError("中断されました");
     if (!payload) {
       throw new AIError(

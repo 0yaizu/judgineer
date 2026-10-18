@@ -8,7 +8,7 @@ import {
   issuesResultSchema,
   SIM_DAYS,
 } from "@tka/shared";
-import { generate } from "./ai/client";
+import { CancelledError, generate } from "./ai/client";
 import {
   clampDay,
   cleanArchitecture,
@@ -196,7 +196,9 @@ async function run(pid: string) {
         schema: flowsResultSchema,
       });
       p.flows.push(...cleanFlows(extra.flows, arch, featIds));
-    } catch {
+    } catch (e) {
+      // キャンセルは台本づくりごと止める
+      if (e instanceof CancelledError) throw e;
       // 補完は失敗しても本体の分析は残す (残りは uncovered_features として画面に出る)
     }
   }

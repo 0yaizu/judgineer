@@ -14,6 +14,7 @@ import {
   useState,
 } from "react";
 import { ArchDiagram } from "#/components/ArchDiagram";
+import { CancelButton } from "#/components/CancelButton";
 import { CodeView } from "#/components/CodeView";
 import { Crumbs, crumbLinkClass } from "#/components/Crumbs";
 import { DiffView } from "#/components/DiffView";
@@ -30,7 +31,7 @@ import {
 } from "#/components/starwind/tabs";
 import { Textarea } from "#/components/starwind/textarea";
 import { Waiting } from "#/components/Waiting";
-import { api } from "#/lib/api";
+import { api, Cancelled } from "#/lib/api";
 import { chosenLabel, limitDay, MIN_PLAN } from "#/lib/judge";
 import type { ChatMessage, Issue, ProjectView } from "#/lib/types";
 import { useDetail } from "#/lib/useDetail";
@@ -123,6 +124,7 @@ function DetailGate({
             text="出来事の詳細を書いています"
             pid={p.id}
             iid={issue.id}
+            cancelPid={p.id}
           />
         </div>
       </div>
@@ -316,7 +318,8 @@ function IssuePage({
     try {
       await fn();
     } catch (e) {
-      setError((e as Error).message);
+      // キャンセルは自分で止めたので、エラーとしては出さない
+      if (!(e instanceof Cancelled)) setError((e as Error).message);
     } finally {
       setBusy("");
     }
@@ -656,11 +659,17 @@ function IssuePage({
                   />
                 ))}
                 {(busy === "chat" || busy === "hint" || busy === "start") && (
-                  <Typing />
+                  <div className="flex items-end gap-2">
+                    <Typing />
+                    {busy !== "start" && <CancelButton pid={pid} />}
+                  </div>
                 )}
                 {busy === "commit" && (
                   <div className="rounded-lg border bg-background p-3">
-                    <Waiting text="決めた方針をコードと構成に反映して、この先の運用への影響を計算しています（20〜40秒）" />
+                    <Waiting
+                      text="決めた方針をコードと構成に反映して、この先の運用への影響を計算しています（20〜40秒）"
+                      cancelPid={pid}
+                    />
                   </div>
                 )}
                 {issue.lesson && issue.phase === "done" && (
