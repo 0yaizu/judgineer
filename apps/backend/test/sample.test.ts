@@ -104,7 +104,16 @@ test("情報漏洩デモAPIの検査入力にデモだと明かす言葉がな�
     readSources(clinicResultsDir, 60_000, scan(clinicResultsDir)) +
     readConfig(clinicResultsDir) +
     readFileSync(resolve(clinicResultsDir, "background.json"), "utf8");
-  for (const word of ["わざと", "サンプル", "デモ", "故意", "退職", "委託"]) {
+  for (const word of [
+    "わざと",
+    "サンプル",
+    "デモ",
+    "故意",
+    "退職",
+    "委託",
+    "受託",
+    "検査会社",
+  ]) {
     expect(text).not.toContain(word);
   }
   expect(text).toContain("自分のものではない患者IDでも検査結果が表示された");
