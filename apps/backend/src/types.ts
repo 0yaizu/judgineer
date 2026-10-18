@@ -84,6 +84,8 @@ export type IssueData = {
   affected_nodes: string[];
   if_ignored?: IfIgnored;
   stance?: string;
+  // 「決める」に入った最初の発言の位置 (chat の添字)。画面で会話をそこまで遡るのに使う
+  decide_at?: number;
   chosen?: { label: string; change_summary: string };
   // 会話フローでは option_index は常に null
   decision?: {
@@ -165,8 +167,9 @@ export type ProjectSummary = {
   id: string;
   title: string;
   created_at: string;
-  issues: number;
+  issues: number; // 先の出来事も含む総数。画面に出すとネタバレになる
   decided: number;
+  sim_day: number; // 運用を何日目まで進めたか
 };
 
 export type AppSummary = {

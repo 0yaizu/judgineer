@@ -87,6 +87,7 @@ export async function chatTurn(
     schema: chatResultSchema,
   });
 
+  const firstReply = issue.chat.length;
   for (const m of result.messages.slice(0, 3)) {
     const body = m.text.trim();
     if (!body) continue;
@@ -113,6 +114,9 @@ export async function chatTurn(
     }
   }
   issue.phase = next;
+  // 調べる → 決める に進んだ最初の返事の位置を覚えておく
+  if (issue.decide_at == null && phase === "investigate" && next !== phase)
+    issue.decide_at = firstReply;
 
   const lesson = (result.lesson ?? "").trim();
   if (next === "done" && lesson && issue.decision) {

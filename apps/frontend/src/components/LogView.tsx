@@ -8,11 +8,12 @@ export type LogLine = {
   text: string;
 };
 
+// 色はモックに合わせて、暗い背景のターミナル風にする
 const LEVEL_CLASS: Record<LogLine["level"], string> = {
-  info: "text-muted-foreground",
-  ok: "text-green-700 dark:text-green-400",
-  warn: "text-amber-700 dark:text-amber-400",
-  error: "text-error",
+  info: "text-[#c9d1d9]",
+  ok: "text-[#7ee2b8]",
+  warn: "text-[#f2cc60]",
+  error: "font-medium text-[#ff9b85]",
 };
 
 const LEVEL_TAG: Partial<Record<LogLine["level"], string>> = {
@@ -37,32 +38,28 @@ export function LogView({
   }, [lines]);
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-muted/40">
-      {title && (
-        <div className="border-b px-3 py-1.5 text-xs font-medium text-muted-foreground">
-          {title}
-        </div>
-      )}
+    <div className="overflow-hidden rounded-lg bg-[#161b22] dark:bg-[#0b0f12] dark:ring-1 dark:ring-border text-[#c9d1d9]">
+      {title && <div className="px-3 pt-2 text-xs text-[#8b949e]">{title}</div>}
       <div
         ref={ref}
         role="log"
         aria-label={title ?? "ログ"}
         // biome-ignore lint/a11y/noNoninteractiveTabindex: キーボードだけでもスクロールできるようにする
         tabIndex={0}
-        className="overflow-y-auto px-3 py-2 font-mono text-xs leading-relaxed"
+        className="overflow-y-auto px-3 pt-1.5 pb-2.5 font-mono text-[12.5px] leading-[1.7]"
         style={{ height }}
       >
         {lines.length === 0 && (
-          <p className="text-muted-foreground">まだログはありません</p>
+          <p className="text-[#6e7681]">まだログはありません</p>
         )}
         {lines.map((l) => (
           <div
             key={l.key}
-            className={`grid grid-cols-[max-content_5rem_1fr] gap-x-3 ${LEVEL_CLASS[l.level]}`}
+            className="grid gap-x-2.5 whitespace-pre-wrap break-all sm:grid-cols-[124px_76px_1fr]"
           >
-            <span className="opacity-70">{l.time}</span>
-            <span className="opacity-70">{l.source}</span>
-            <span className="break-words">
+            <span className="text-[#6e7681]">{l.time}</span>
+            <span className="truncate text-[#8b949e]">{l.source}</span>
+            <span className={LEVEL_CLASS[l.level]}>
               {LEVEL_TAG[l.level]}
               {l.text}
             </span>

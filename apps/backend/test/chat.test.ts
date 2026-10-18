@@ -37,8 +37,10 @@ test("会話 → 方針の確定 → 反映 → 振り返り → メモ", async 
 
   i = (await chat(p, iid, { text: "デバッグ画面が外から見えている" })).data;
   const n = i.chat.length;
+  expect(i.decide_at).toBeUndefined();
   i = (await chat(p, iid, { text: "B社が困る" })).data;
   expect(i.phase).toBe("decide");
+  expect(i.decide_at).toBe(n + 1); // 発言のすぐ後ろ = AI の最初の返事
   expect(i.chat.length).toBe(n + 1 + 3); // 発言 + AI の発言は3件まで
   expect(i.chat.some((m) => m.role === "stakeholder")).toBe(true);
 

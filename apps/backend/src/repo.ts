@@ -174,6 +174,7 @@ export function listProjects(): ProjectSummary[] {
       created_at: r.createdAt,
       issues: mine.length,
       decided: mine.filter((i) => i.data.feedback).length,
+      sim_day: r.simDay,
     };
   });
 }

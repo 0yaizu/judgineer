@@ -1,132 +1,43 @@
-import { IconPlus } from "@tabler/icons-react";
+import { IconArrowRight } from "@tabler/icons-react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { ErrorBox } from "#/components/ErrorBox";
-import { ButtonVariants } from "#/components/starwind/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "#/components/starwind/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "#/components/starwind/table";
-import { Waiting } from "#/components/Waiting";
-import { api } from "#/lib/api";
-import type { AppSummary, ProjectSummary } from "#/lib/types";
+import { Logo } from "#/components/Logo";
+import { pillClass } from "#/components/Page";
 
-const RECENT = 5;
+export const Route = createFileRoute("/")({ component: Title });
 
-export const Route = createFileRoute("/")({ component: Projects });
-
-function Projects() {
-  const [apps, setApps] = useState<AppSummary[] | null>(null);
-  const [sessions, setSessions] = useState<ProjectSummary[]>([]);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    api
-      .apps()
-      .then(setApps)
-      .catch((e: Error) => setError(e.message));
-    api
-      .projects()
-      .then(setSessions)
-      .catch(() => {});
-  }, []);
-
+function Title() {
   return (
-    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      <section className="grid content-start gap-6">
-        <div className="grid gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">登録したアプリ</h1>
-            <p className="mt-2 text-muted-foreground">
-              ジャッジニアに登録したアプリの一覧です。選ぶと、登録した内容を入れた登録画面が開きます。
-            </p>
-          </div>
-          <Link
-            to="/register"
-            className={`${ButtonVariants.button({ variant: "primary" })} justify-self-end`}
-          >
-            <IconPlus />
-            アプリを登録
-          </Link>
-        </div>
-        <ErrorBox message={error} />
-        {!apps && !error && <Waiting text="読み込み中" />}
-        {apps?.length === 0 && (
-          <p className="text-muted-foreground">
-            まだ登録がありません。「アプリを登録」から始めてください。
-          </p>
-        )}
-        {apps && apps.length > 0 && (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>アプリ名</TableHead>
-                <TableHead>最終登録日</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {apps.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell>
-                    <Link
-                      to="/register"
-                      search={{ app: p.id }}
-                      className="font-medium hover:underline"
-                    >
-                      {p.title}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{p.updated_at.slice(0, 10)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </section>
+    <div className="relative flex min-h-[calc(100vh-14rem)] flex-col items-center justify-center text-center">
+      {/* ロゴの後ろに、うっすら緑の光を置く（暗い背景では見えにくいので濃くする） */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 left-1/2 size-[34rem] -translate-x-1/2 -translate-y-[60%] rounded-full bg-[radial-gradient(closest-side,color-mix(in_oklab,var(--primary)_19%,transparent),transparent)] dark:bg-[radial-gradient(closest-side,color-mix(in_oklab,var(--primary)_32%,transparent),transparent)]"
+      />
 
-      <aside>
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>セッション履歴</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {sessions.length === 0 && (
-              <p className="text-sm text-muted-foreground">まだありません</p>
-            )}
-            <ul className="divide-y">
-              {sessions.slice(0, RECENT).map((s) => (
-                <li key={s.id} className="py-2">
-                  <Link
-                    to="/p/$pid"
-                    params={{ pid: s.id }}
-                    className="font-medium hover:underline"
-                  >
-                    {s.title}
-                  </Link>
-                  <p className="text-xs text-muted-foreground">
-                    {s.created_at.slice(0, 10)}・判断済み {s.decided}/{s.issues}
-                  </p>
-                </li>
-              ))}
-            </ul>
-            {sessions.length > RECENT && (
-              <Link to="/sessions" className="mt-2 block text-sm underline">
-                すべて見る
-              </Link>
-            )}
-          </CardContent>
-        </Card>
-      </aside>
+      <div className="relative flex animate-in flex-col items-center duration-1000 fade-in slide-in-from-bottom-2">
+        <Logo className="size-28 text-ink drop-shadow-sm" />
+
+        <h1 className="mt-7 pl-[0.08em] font-display text-5xl font-extrabold tracking-[0.08em] sm:text-7xl">
+          ジャッジニア
+        </h1>
+
+        <div className="mt-5 flex items-center gap-4 text-muted-foreground">
+          <span className="h-px w-12 bg-gradient-to-r from-transparent to-current opacity-60" />
+          <span className="pl-[0.6em] text-[11px] font-medium tracking-[0.6em]">
+            JUDGINEER
+          </span>
+          <span className="h-px w-12 bg-gradient-to-l from-transparent to-current opacity-60" />
+        </div>
+      </div>
+
+      <Link
+        to="/register"
+        // 遅れて現れる動きは animation の値で指定する（delay-/duration- だとホバーの動きまで遅くなる）
+        className={`${pillClass} mt-14 animate-in fill-mode-backwards fade-in [animation-delay:300ms] [animation-duration:1s]`}
+      >
+        アプリを登録
+        <IconArrowRight />
+      </Link>
     </div>
   );
 }
