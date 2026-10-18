@@ -4,8 +4,10 @@ import { z } from "zod";
 import { generate } from "../ai/client";
 import { chatTurn, opening } from "../chat";
 import { ifIgnoredFor, uniqueDay } from "../clean";
+import { ensureDetail, openDetail } from "../detail";
 import { applyFix } from "../fix";
 import { HttpError, readBody } from "../http";
+import { getProgress } from "../progress";
 import {
   currentDir,
   findIssue,
@@ -22,7 +24,22 @@ import type { Issue } from "../types";
 
 // 他のルートと同じく /api/projects に繋ぐ。パスは /:pid/issues/:iid/...
 export default new Hono()
-  .post("/:pid/issues/:iid/chat/start", (c) => {
+  // 本文が未生成なら作って、出来事を返す
+  .post("/:pid/issues/:iid/detail", async (c) => {
+    const pid = c.req.param("pid");
+    const iid = c.req.param("iid");
+    findIssue(loadProject(pid), iid);
+    await openDetail(pid, iid);
+    return c.json(findIssue(loadProject(pid), iid));
+  })
+  .get("/:pid/issues/:iid/progress", (c) => {
+    const pid = c.req.param("pid");
+    const iid = c.req.param("iid");
+    findIssue(loadProject(pid), iid);
+    return c.json(getProgress(`${pid}:${iid}`));
+  })
+  .post("/:pid/issues/:iid/chat/start", async (c) => {
+    await ensureDetail(c.req.param("pid"), c.req.param("iid"));
     const p = loadProject(c.req.param("pid"));
     const issue = findIssue(p, c.req.param("iid"));
     if (issue.chat.length === 0) {
@@ -33,6 +50,7 @@ export default new Hono()
     return c.json(issue);
   })
   .post("/:pid/issues/:iid/chat", async (c) => {
+    await ensureDetail(c.req.param("pid"), c.req.param("iid"));
     const p = loadProject(c.req.param("pid"));
     const issue = findIssue(p, c.req.param("iid"));
     const body = await readBody(
@@ -47,6 +65,7 @@ export default new Hono()
   })
   // 会話で決めた方針を確定して、コードと構成に反映する
   .post("/:pid/issues/:iid/commit", async (c) => {
+    await ensureDetail(c.req.param("pid"), c.req.param("iid"));
     const p = loadProject(c.req.param("pid"));
     const issue = findIssue(p, c.req.param("iid"));
     const body = await readBody(
@@ -75,6 +94,7 @@ export default new Hono()
     return c.json({ issue, project: projectPayload(p) });
   })
   .post("/:pid/issues/:iid/skip", async (c) => {
+    await ensureDetail(c.req.param("pid"), c.req.param("iid"));
     const p = loadProject(c.req.param("pid"));
     const issue = findIssue(p, c.req.param("iid"));
     const { reason: raw } = await readBody(c, z.object({ reason: z.string() }));
@@ -165,6 +185,7 @@ export default new Hono()
     return c.json(issue);
   })
   .post("/:pid/issues/:iid/attack-scenarios", async (c) => {
+    await ensureDetail(c.req.param("pid"), c.req.param("iid"));
     const p = loadProject(c.req.param("pid"));
     const issue = findIssue(p, c.req.param("iid"));
     const evidence = p.findings.filter((f) => issue.finding_ids.includes(f.id));

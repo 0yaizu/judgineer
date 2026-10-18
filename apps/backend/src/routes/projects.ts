@@ -1,12 +1,14 @@
-import { cpSync, existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { type Background, backgroundSchema, SIM_DAYS } from "@tka/shared";
 import { Hono } from "hono";
 import { z } from "zod";
-import { analyze, getProgress } from "../analyze";
+import { analyze } from "../analyze";
 import { settled } from "../clean";
-import { config, REPO_ROOT } from "../config";
+import { config } from "../config";
 import { HttpError, readBody } from "../http";
+import { getProgress } from "../progress";
 import {
+  createProject,
   currentDir,
   inside,
   isFile,
@@ -15,8 +17,6 @@ import {
   srcDir,
 } from "../project";
 import * as repo from "../repo";
-import { extractFeatures, scan, snapshotTarget } from "../scanner";
-import type { Project } from "../types";
 
 const BG_KEYS = Object.keys(backgroundSchema.shape) as (keyof Background)[];
 
@@ -40,29 +40,7 @@ export default new Hono()
     )
       throw new HttpError(500, "検査対象のフォルダが見つかりません");
 
-    const id = repo.newId();
-    const src = srcDir(id);
-    // dataDir が検査対象の中にあっても、コピーが自分自身を取り込まないようにする
-    snapshotTarget(config.targetDir, src, [REPO_ROOT, config.dataDir]);
-    cpSync(src, currentDir(id), { recursive: true });
-    const project: Project = {
-      id,
-      created_at: repo.now(),
-      background: bg,
-      source: "target",
-      findings: scan(src),
-      features: extractFeatures(src),
-      issues: [],
-      architecture: { nodes: [], edges: [] },
-      flows: [],
-      dismissed: [],
-      uncovered_features: [],
-      assumed_users: null,
-      sim_day: 0,
-      analyzed_by: null,
-    };
-    repo.saveProject(project);
-    return c.json(project);
+    return c.json(createProject(bg));
   })
   .get("/:pid", (c) => c.json(projectPayload(loadProject(c.req.param("pid")))))
   .get("/:pid/progress", (c) => {

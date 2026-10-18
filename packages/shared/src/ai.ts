@@ -28,7 +28,11 @@ export const backgroundSchema = z.object({
 export type Background = z.infer<typeof backgroundSchema>;
 
 export const signalSchema = z.object({
-  time: z.string(),
+  time: z
+    .string()
+    .describe(
+      '"06:12:03" のように 時:分:秒 の24時間表記だけ（日付や「前日」は付けない）',
+    ),
   source: z.string(),
   level: z.enum(["info", "warn", "error"]),
   text: z.string(),
@@ -92,20 +96,37 @@ const incidentFields = {
   background_link: z.string(),
 };
 
-// LLM が返す問題。保存用の Issue は backend の types.ts
-export const generatedIssueSchema = z.object({
+export const incidentSchema = z.object(incidentFields);
+export type Incident = z.infer<typeof incidentSchema>;
+
+// LLM が最初に返す問題の骨組み (本文なし)。保存用の Issue は backend の types.ts
+export const issueOutlineSchema = z.object({
   finding_ids: z.array(z.string()),
-  ...incidentFields,
+  day: incidentFields.day,
+  incident_title: z.string(),
+  view: viewSchema,
+  affected_nodes: z.array(z.string()),
+  title: z.string(),
+  category: incidentFields.category,
+  severity: severitySchema,
   if_ignored: z.object({
     impact: z.enum(["none", "escalate"]),
     reason: z.string(),
     after_days: z.number().int().describe("0〜90"),
-    incident_title: z.string(),
-    incident_story: z.string(),
-    signals: z.array(signalSchema),
+    incident_title: z.string().describe("escalate のときだけ。none は空文字"),
   }),
 });
-export type GeneratedIssue = z.infer<typeof generatedIssueSchema>;
+export type IssueOutline = z.infer<typeof issueOutlineSchema>;
+
+// 必要になったときに1件ずつ作る本文
+export const issueDetailSchema = z.object({
+  incident_story: z.string().min(1), // 空文字は「未生成」の印なので、空では返させない
+  signals: z.array(signalSchema),
+  what_happens: z.string(),
+  who_is_affected: z.string(),
+  background_link: z.string(),
+});
+export type IssueDetail = z.infer<typeof issueDetailSchema>;
 
 export const dismissedSchema = z.object({
   finding_id: z.string(),
@@ -125,10 +146,29 @@ export const flowsResultSchema = z.object({ flows: z.array(flowSchema) });
 export type FlowsResult = z.infer<typeof flowsResultSchema>;
 
 export const issuesResultSchema = z.object({
-  issues: z.array(generatedIssueSchema),
+  issues: z.array(issueOutlineSchema),
   dismissed: z.array(dismissedSchema),
 });
 export type IssuesResult = z.infer<typeof issuesResultSchema>;
+
+export const extraFindingsResultSchema = z.object({
+  candidates: z.array(
+    z.object({
+      title: z.string().describe("問題を一文で（30字前後）"),
+      file: z.string().describe("source の見出しのファイル名"),
+      line: z
+        .number()
+        .int()
+        .describe("その問題の行番号（source に付いている番号）"),
+      quote: z
+        .string()
+        .describe("問題のある行を、ソースから一字一句コピーした1行"),
+      why: z.string().describe("運用で何が起きるかの一文"),
+    }),
+  ),
+});
+export type ExtraFindingsResult = z.infer<typeof extraFindingsResultSchema>;
+export type ExtraCandidate = ExtraFindingsResult["candidates"][number];
 
 export const applyResultSchema = z.object({
   summary: z.string(),

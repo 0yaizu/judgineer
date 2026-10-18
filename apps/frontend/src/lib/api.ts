@@ -96,6 +96,8 @@ export const api = {
   analyze,
   progress: (pid: string) =>
     read<Progress>(projectApi.progress.$get({ param: { pid } })),
+  issueProgress: (pid: string, iid: string) =>
+    read<Progress>(issueApi.progress.$get(ip(pid, iid))),
   setSimDay: (pid: string, day: number) =>
     post<{ sim_day: number; limit: number }>(
       projectApi.sim.$url({ param: { pid } }),
@@ -106,6 +108,8 @@ export const api = {
     url.search = new URLSearchParams({ path, version }).toString();
     return read<{ path: string; content: string }>(fetch(url));
   },
+  detail: (pid: string, iid: string) =>
+    read<Issue>(issueApi.detail.$post(ip(pid, iid))),
   chatStart: (pid: string, iid: string) =>
     read<Issue>(issueApi.chat.start.$post(ip(pid, iid))),
   chat: (pid: string, iid: string, text: string, hint = false) =>
