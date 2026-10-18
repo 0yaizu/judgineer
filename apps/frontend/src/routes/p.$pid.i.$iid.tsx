@@ -485,7 +485,11 @@ function IssuePage({
       <div
         className={`grid items-start gap-6 ${showChat ? "lg:grid-cols-[minmax(0,1.15fr)_minmax(22rem,1fr)]" : ""}`}
       >
-        <section className="grid min-w-0 gap-4" aria-label="根拠">
+        {/* 中の列も最小幅 0 にする。auto のままだと長いコード行の幅まで広がり、右の会話欄の下にはみ出す */}
+        <section
+          className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
+          aria-label="根拠"
+        >
           <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
             <TabsList className="w-full justify-start gap-1 rounded-none border-b bg-transparent p-0">
               <TabsTrigger value="code" className={TAB_CLASS}>
