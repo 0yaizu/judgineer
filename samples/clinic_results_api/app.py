@@ -1,7 +1,7 @@
 """
 ひかり診療所 検査結果API
 
-患者向けアプリと外部の検査会社に、検査結果と関連文書を提供する。
+患者向けアプリに、検査結果と関連文書を提供する。
 """
 import csv
 import io
@@ -17,7 +17,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app, origins=[os.environ.get("FRONTEND_ORIGIN", "http://127.0.0.1:3000")])
 
-# 検査会社と患者向けアプリで共通のAPIキー
+# 患者向けアプリの全利用者で共通のAPIキー
 RESULTS_API_KEY = os.environ["RESULTS_API_KEY"]
 DB_PATH = Path(os.environ.get("DATA_DIR", Path(__file__).parent)) / "clinic.db"
 
