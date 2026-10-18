@@ -38,7 +38,7 @@ export function LogView({
   }, [lines]);
 
   return (
-    <div className="overflow-hidden rounded-lg bg-[#161b22] text-[#c9d1d9]">
+    <div className="overflow-hidden rounded-lg bg-[#161b22] dark:bg-[#0b0f12] dark:ring-1 dark:ring-border text-[#c9d1d9]">
       {title && <div className="px-3 pt-2 text-xs text-[#8b949e]">{title}</div>}
       <div
         ref={ref}

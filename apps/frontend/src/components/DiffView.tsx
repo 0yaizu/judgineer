@@ -23,7 +23,10 @@ export function DiffView({ diffs }: { diffs: FileDiff[] }) {
         const del = d.rows.filter((r) => r.type === "del").length;
         const add = d.rows.filter((r) => r.type === "add").length;
         return (
-          <div key={d.file} className="overflow-hidden rounded-lg bg-[#161b22]">
+          <div
+            key={d.file}
+            className="overflow-hidden rounded-lg bg-[#161b22] dark:bg-[#0b0f12] dark:ring-1 dark:ring-border"
+          >
             <div className="flex justify-between bg-[#0d1117] px-3.5 py-2 font-mono text-[12.5px] text-[#e6edf3]">
               {d.file}
               <span className="flex gap-2">

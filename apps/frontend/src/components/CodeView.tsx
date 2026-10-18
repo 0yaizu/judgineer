@@ -44,7 +44,7 @@ export function CodeView({
     hits.set(f.line, [...(hits.get(f.line) ?? []), f]);
 
   return (
-    <div className="overflow-hidden rounded-lg bg-[#161b22]">
+    <div className="overflow-hidden rounded-lg bg-[#161b22] dark:bg-[#0b0f12] dark:ring-1 dark:ring-border">
       <div className="flex flex-wrap bg-[#0d1117]">
         {files.map((f) => (
           <button

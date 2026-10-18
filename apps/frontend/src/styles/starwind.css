@@ -85,8 +85,8 @@
 }
 
 :root {
-  /* 色はモック（試作版）に合わせる */
-  --background: #ffffff;
+  /* 色はモック（試作版）に合わせる。背景はプレゼンのスライドと同じ生成り色 */
+  --background: #f6f5f2;
   --foreground: #1f2933;
   --card: #ffffff;
   --card-foreground: #1f2933;
@@ -98,7 +98,7 @@
   --secondary: #ffffff;
   --secondary-foreground: #1f2933;
   --secondary-accent: #1f2933;
-  --muted: #f7f9fa;
+  --muted: #eeede8;
   --muted-foreground: #6b7682;
   --accent: #eef5f1;
   --accent-foreground: #17594a;
@@ -110,14 +110,14 @@
   --warning-foreground: #c2410c;
   --error: #c2410c;
   --error-foreground: #ffffff;
-  --border: #d5dbe0;
-  --input: #d5dbe0;
+  --border: #dcd9d2;
+  --input: #d3d0c8;
   --outline: #52606d;
   --radius: 0.5rem;
 
   /* モック独自の色 */
   --sub: #52606d;
-  --line-soft: #e9edf0;
+  --line-soft: #e8e6e0;
   --tint: #eef5f1;
   --warn-tint: #fdf1ea;
   /* ロゴの線と、主ボタンの色 */

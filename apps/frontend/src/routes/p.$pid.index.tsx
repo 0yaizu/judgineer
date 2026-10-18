@@ -354,7 +354,7 @@ function Simulation({
       <ErrorBox message={error} />
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <section className="grid gap-3 rounded-[10px] border bg-background px-[18px] pt-4 pb-[18px]">
+        <section className="grid gap-3 rounded-[10px] border bg-card px-[18px] pt-4 pb-[18px]">
           <div className="flex items-center justify-between">
             <h2 className="text-[15px] font-bold text-sub">システム構成</h2>
             <span
