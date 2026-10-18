@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { SIM_DAYS } from "@tka/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArchDiagram } from "#/components/ArchDiagram";
 import { Crumbs, crumbLinkClass } from "#/components/Crumbs";
 import { ErrorBox } from "#/components/ErrorBox";
@@ -32,6 +32,7 @@ import {
   limitDay,
 } from "#/lib/judge";
 import type { Issue, ProjectView as Project } from "#/lib/types";
+import { useDetail } from "#/lib/useDetail";
 import { useProject } from "#/lib/useProject";
 
 const setSimDay = (pid: string, day: number) =>
@@ -86,6 +87,15 @@ function normalLog(
   };
 }
 
+const signalLogs = (i: Issue): LogLine[] =>
+  i.signals.map((s, n) => ({
+    key: `s${i.id}${n}${seq++}`,
+    time: `${i.day}日目 ${s.time}`,
+    source: s.source,
+    level: s.level,
+    text: s.text,
+  }));
+
 function incidentLogs(i: Issue): LogLine[] {
   return [
     {
@@ -95,13 +105,7 @@ function incidentLogs(i: Issue): LogLine[] {
       level: "error",
       text: `出来事が発生：${i.incident_title}`,
     },
-    ...i.signals.map((s, n) => ({
-      key: `s${i.id}${n}${seq++}`,
-      time: `${i.day}日目 ${s.time}`,
-      source: s.source,
-      level: s.level,
-      text: s.text,
-    })),
+    ...signalLogs(i),
   ];
 }
 
@@ -293,6 +297,17 @@ function Simulation({
   };
 
   const atIncident = current && !isSettled(current);
+  const currentId = current?.id;
+  // 出来事のログは本文が無いまま先に出ているので、本文が届いたら signals を足す
+  const onDetail = useCallback(
+    (np: Project) => {
+      onChange(np);
+      const d = np.issues.find((i) => i.id === currentId);
+      if (d) setLogs((l) => appendLog(l, ...signalLogs(d)));
+    },
+    [onChange, currentId],
+  );
+  const detail = useDetail(p, atIncident ? current : undefined, onDetail);
   const origin = current?.escalated_from
     ? issues.find((i) => i.id === current.escalated_from)
     : undefined;
@@ -381,7 +396,22 @@ function Simulation({
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3 text-sm">
-                <p>{current.incident_story}</p>
+                {detail.loading ? (
+                  <Waiting
+                    text="出来事の詳細を書いています"
+                    pid={pid}
+                    iid={current.id}
+                  />
+                ) : detail.error ? (
+                  <>
+                    <ErrorBox message={detail.error} />
+                    <Button variant="secondary" onClick={detail.retry}>
+                      もう一度試す
+                    </Button>
+                  </>
+                ) : (
+                  <p>{current.incident_story}</p>
+                )}
                 {origin && (
                   <p className="rounded-md bg-muted p-2">
                     {origin.day}

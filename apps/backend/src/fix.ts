@@ -13,8 +13,10 @@ import {
   nextIssueId,
 } from "./project";
 import { applyPrompt, applySystem } from "./prompts/apply";
-import { readSources, relocate } from "./scanner";
-import type { Effect, Issue, Project } from "./types";
+import { readSources, relocate, scan, scannerFindings } from "./scanner";
+import { checkSyntax, syntaxCheckable } from "./syntax";
+import type { Effect, Fix, Issue, Project } from "./types";
+import { verifyFix } from "./verify";
 
 /** 選び直したときに、前の修正の影響を元に戻す */
 export function undoFix(p: Project, issue: Issue): void {
@@ -86,13 +88,16 @@ export async function applyFix(p: Project, issue: Issue): Promise<void> {
   }
   const beforeFiles: Record<string, string> = {};
   const diffs = [];
+  const newContent: Record<string, string> = {};
+  const targets: Record<string, string> = {};
+  // 1) 変更後の内容をメモリ上で作る (まだ書き込まない)
   for (const [file, changes] of byFile) {
     const target = inside(cur, file); // current/ の外は書き換えない
     if (!target || !isFile(target)) continue;
     const before = readFileSync(target, "utf8");
     const lines = splitLines(before);
     const notes: string[] = [];
-    let applied = false;
+    let changed = false;
     let lastStart = lines.length + 2;
     for (const c of [...changes].sort((a, b) => b.start_line - a.start_line)) {
       const s = c.start_line;
@@ -102,12 +107,13 @@ export async function applyFix(p: Project, issue: Issue): Promise<void> {
       if (e >= lastStart) continue;
       lines.splice(s - 1, e - (s - 1), ...c.new_lines);
       lastStart = s;
-      applied = true;
+      changed = true;
       if (c.note) notes.push(c.note);
     }
-    if (!applied) continue;
+    if (!changed) continue;
     const after = lines.join("\n") + (before.endsWith("\n") ? "\n" : "");
-    writeFileSync(target, after);
+    newContent[file] = after;
+    targets[file] = target;
     beforeFiles[file] = before;
     diffs.push({
       file,
@@ -116,34 +122,115 @@ export async function applyFix(p: Project, issue: Issue): Promise<void> {
     });
   }
 
+  // 2) 構文チェック。1つでもエラーなら何も書かずに元へ戻して弾く
+  let syntax: "ok" | "skipped" = "skipped";
+  for (const [file, content] of Object.entries(newContent)) {
+    const err = await checkSyntax(file, content);
+    if (err) {
+      for (const [f, c] of Object.entries(applied)) {
+        const t = inside(cur, f);
+        if (t) writeFileSync(t, c);
+      }
+      throw new HttpError(
+        422,
+        `AI が作った修正に構文エラーがありました（${file}: ${err}）。もう一度反映を試してください`,
+      );
+    }
+    if (syntaxCheckable(file)) syntax = "ok";
+  }
+
+  // 3) 書き込み、前後を再スキャンして比べる
+  const scanBefore = scan(cur);
+  for (const [file, content] of Object.entries(newContent)) {
+    writeFileSync(targets[file], content);
+  }
+  const v = verifyFix(scannerFindings(p.findings), scanBefore, scan(cur));
+
   let archAfter = cleanArchitecture(result.architecture_after);
   if (archAfter.nodes.length === 0) archAfter = archBefore;
   p.architecture = archAfter;
 
   // この先の出来事への影響
   const effects: Effect[] = [];
-  const byId = new Map(p.issues.map((o) => [o.id, o]));
-  const futureIds = new Set(future.map((o) => o.id));
-  for (const e of result.future) {
-    const o = byId.get(e.issue_id);
-    if (!o || !futureIds.has(o.id)) continue;
-    effects.push({
-      issue_id: o.id,
-      effect: e.effect,
-      reason: e.reason,
-      day: o.day,
-    });
-    if (e.effect === "prevented") {
+  const aiSays = new Map(result.future.map((e) => [e.issue_id, e]));
+  const scannerIds = new Set(scannerFindings(p.findings).map((f) => f.id));
+  // 再スキャンで確かめられるものはスキャナの結果を優先し、AI の自己申告は確かめられないときだけ使う
+  for (const o of future) {
+    const ai = aiSays.get(o.id);
+    let effect = ai?.effect;
+    let reason = ai?.reason ?? "";
+    const ids = o.finding_ids;
+    // AI 由来の指摘はスキャナで再確認できないので、AI の判定を残す
+    if (ids.length > 0 && ids.every((id) => scannerIds.has(id))) {
+      const done = ids.filter((id) => v.resolvedIds.has(id)).length;
+      if (done === ids.length) {
+        effect = "prevented";
+        reason ||=
+          "自動チェック: 該当する箇所が修正後のコードから無くなりました";
+      } else if (effect === "prevented") {
+        effect = done > 0 ? "reduced" : "unchanged";
+        reason = `自動チェック: 該当箇所が残っていたため判定を直しました。${reason}`;
+      }
+    }
+    if (!effect) continue;
+    effects.push({ issue_id: o.id, effect, reason, day: o.day });
+    if (effect === "prevented") {
       o.prevented_by = issue.id;
-      o.prevented_reason = e.reason;
-    } else if (e.effect === "reduced" || e.effect === "worse") {
-      o.changed_by = {
-        issue_id: issue.id,
-        effect: e.effect,
-        reason: e.reason,
-      };
+      o.prevented_reason = reason;
+    } else if (effect === "reduced" || effect === "worse") {
+      o.changed_by = { issue_id: issue.id, effect, reason };
     }
   }
+
+  // 自動チェックの結果
+  const where = (f: { file: string; line: number }) =>
+    `${f.file} ${f.line}行目`;
+  // 確かめられるのはスキャナ由来の指摘だけ。AI が見つけたものは「確認できない」として分ける
+  const checkable = evidence.filter((f) => scannerIds.has(f.id));
+  const unchecked = evidence.length - checkable.length;
+  const ownResolved = checkable
+    .filter((f) => v.resolvedIds.has(f.id))
+    .map((f) => f.id);
+  const ownRemaining = checkable.filter((f) => !v.resolvedIds.has(f.id));
+  const verification: NonNullable<Fix["verification"]> = {
+    resolved: ownResolved,
+    remaining: ownRemaining.map((f) => f.id),
+    introduced: v.introduced.map(({ rule, title, file, line }) => ({
+      rule,
+      title,
+      file,
+      line,
+    })),
+    syntax,
+  };
+  const list = (xs: string[]) =>
+    xs.slice(0, 5).join("、") +
+    (xs.length > 5 ? `、ほか${xs.length - 5}件` : "");
+  const total = ownResolved.length + ownRemaining.length;
+  const checkParts: string[] = [];
+  if (total === 0) {
+    // この出来事の指摘がすべて AI 由来のときは、確かめられた件数は無い
+  } else if (ownRemaining.length === 0) {
+    checkParts.push(`この出来事の指摘${total}件はすべて解消。`);
+  } else {
+    checkParts.push(
+      `この出来事の指摘${total}件のうち${ownResolved.length}件が解消、${ownRemaining.length}件が残っています（${list(
+        ownRemaining.map((f) => `${where(f)}付近: ${f.title}`),
+      )}）。`,
+    );
+  }
+  if (unchecked > 0)
+    checkParts.push(
+      `AI が見つけた指摘${unchecked}件は、スキャナでは確かめられません。`,
+    );
+  checkParts.push(
+    v.introduced.length === 0
+      ? "新しい指摘はありません。"
+      : `この修正で新しく見つかった指摘: ${list(
+          v.introduced.map((f) => `${where(f)}: ${f.title}`),
+        )}。`,
+  );
+  if (syntax === "ok") checkParts.push("構文: 問題なし。");
 
   // 修正が原因で新しく起きる出来事 (1件まで)
   const newIds: string[] = [];
@@ -181,9 +268,15 @@ export async function applyFix(p: Project, issue: Issue): Promise<void> {
     effects,
     new_issue_ids: newIds,
     before_files: beforeFiles,
+    verification,
   };
   // 修正の結果を会話に流し、振り返りに進む
   issue.chat.push({ role: "event", kind: "fix", text: result.summary });
+  issue.chat.push({
+    role: "event",
+    kind: "fix",
+    text: `自動チェック: ${checkParts.join("")}`,
+  });
   if (result.reflection) {
     issue.chat.push({ role: "senior", name: "先輩", text: result.reflection });
   }
