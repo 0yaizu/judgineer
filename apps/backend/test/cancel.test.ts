@@ -1,7 +1,15 @@
 import { expect, test } from "bun:test";
 import type { z } from "zod";
 import { type GenerateOpts, type generate, setAI } from "../src/ai/client";
-import { api, chat, installFakeAI, setup } from "./helpers/fake-ai";
+import { registerTarget } from "../src/targets";
+import {
+  api,
+  chat,
+  installFakeAI,
+  type Payload,
+  setup,
+  TARGET,
+} from "./helpers/fake-ai";
 
 installFakeAI();
 
@@ -99,4 +107,25 @@ test("キャンセルしたあとの新しい依頼は、普通に動く", async
 test("存在しないセッションのキャンセルは 404", async () => {
   const res = await api("POST", "/api/projects/nope/cancel");
   expect(res.status).toBe(404);
+});
+
+test("台本づくりをキャンセルすると、途中までの結果は保存されない", async () => {
+  const target = registerTarget(TARGET);
+  const reg = await api("POST", "/api/projects", {
+    target_id: target.id,
+    background: { title: "キャンセルの確認" },
+  });
+  expect(reg.status).toBe(200);
+  const p = `/api/projects/${reg.data.id}`;
+  const hang = hangUntilAborted();
+  setAI(hang.fn);
+
+  const pending = api("POST", `${p}/analyze`);
+  await hang.begun;
+  await api("POST", `${p}/cancel`);
+  const res = await pending;
+  expect(res.status).toBe(409);
+  const after = await api<Payload>("GET", p);
+  expect(after.data.analyzed_by).toBeNull();
+  expect(after.data.issues).toEqual([]);
 });
