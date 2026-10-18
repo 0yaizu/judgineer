@@ -24,6 +24,7 @@ jobs:
       - run: bun run check
       - run: bun run typecheck
       - run: bun run test
+      - run: bash -n install.sh
       - name: 単体バイナリが起動するか
         run: |
           bun run build
