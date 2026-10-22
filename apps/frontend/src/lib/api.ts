@@ -22,6 +22,9 @@ type Res = { ok: boolean; status: number; json(): Promise<unknown> };
 
 class Disconnected extends Error {}
 
+/** 画面のキャンセルボタンで AI の生成を止めた。エラーとしては出さない */
+export class Cancelled extends Error {}
+
 async function read<T>(res: Promise<Res>): Promise<T> {
   let r: Res;
   try {
@@ -45,6 +48,8 @@ async function read<T>(res: Promise<Res>): Promise<T> {
   }
   if (!r.ok) {
     const detail = (body as { detail?: string } | null)?.detail;
+    if ((body as { cancelled?: boolean } | null)?.cancelled)
+      throw new Cancelled(detail ?? "キャンセルしました");
     throw new Error(detail ?? `エラーが発生しました（${r.status}）`);
   }
   return body as T;
@@ -101,6 +106,9 @@ export const api = {
   createProject: (target_id: string, background: Background) =>
     post<ProjectView>(client.projects.$url(), { target_id, background }),
   analyze,
+  /** このセッションで動いている AI の生成を全部止める */
+  cancel: (pid: string) =>
+    post<{ cancelled: number }>(projectApi.cancel.$url({ param: { pid } }), {}),
   progress: (pid: string) =>
     read<Progress>(projectApi.progress.$get({ param: { pid } })),
   issueProgress: (pid: string, iid: string) =>

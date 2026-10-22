@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArchDiagram } from "#/components/ArchDiagram";
+import { CancelButton } from "#/components/CancelButton";
 import { type LogLine, LogView } from "#/components/LogView";
 import { Spinner } from "#/components/starwind/spinner";
 import { api } from "#/lib/api";
@@ -14,10 +15,13 @@ export function Waiting({
   text,
   pid,
   iid,
+  cancelPid,
 }: {
   text: string;
   pid?: string;
   iid?: string;
+  /** 渡すと、このセッションの AI の生成を止めるキャンセルボタンを出す */
+  cancelPid?: string;
 }) {
   const [sec, setSec] = useState(0);
   const [info, setInfo] = useState<Progress | null>(null);
@@ -87,6 +91,11 @@ export function Waiting({
         )}
         <span>経過{sec}秒</span>
       </output>
+      {cancelPid && (
+        <div>
+          <CancelButton pid={cancelPid} />
+        </div>
+      )}
       {progressError && (
         <p className="text-sm text-warning">
           進捗の取得が一時的に途切れています。自動で再接続します。
