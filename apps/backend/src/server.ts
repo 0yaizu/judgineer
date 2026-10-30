@@ -1,6 +1,7 @@
 import app from "./app";
 import { embeddedAssets } from "./assets";
 import { config } from "./config";
+import "./demo";
 import { seedTargets } from "./targets";
 
 const MIME: Record<string, string> = {

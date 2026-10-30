@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "dev": "turbo run dev",
+    "demo": "DEMO=1 TARGET_DIR=\"$PWD/samples/clinic_results_api\" DATA_DIR=\"$PWD/data/demo\" turbo run dev",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

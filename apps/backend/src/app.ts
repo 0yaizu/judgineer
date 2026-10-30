@@ -2,6 +2,7 @@ import type { Health } from "@tka/shared";
 import { Hono } from "hono";
 import { AIError, CancelledError } from "./ai/client";
 import { inSession } from "./ai/session";
+import { DEMO_LINES } from "./demo";
 import { HttpError } from "./http";
 import apps from "./routes/apps";
 import issues from "./routes/issues";
@@ -33,7 +34,11 @@ const app = new Hono()
     return c.json({ detail: "サーバーでエラーが起きました" }, 500);
   })
   .get("/health", (c) => {
-    const body: Health = { status: "ok", pid: process.pid };
+    const body: Health = {
+      status: "ok",
+      pid: process.pid,
+      demo_lines: process.env.DEMO === "1" ? DEMO_LINES : undefined,
+    };
     return c.json(body);
   })
   .route("/", meta)
