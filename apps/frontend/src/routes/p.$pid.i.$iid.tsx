@@ -188,6 +188,13 @@ function IssuePage({
   const iid = initial.id;
   const [issue, setIssue] = useState(initial);
   const [text, setText] = useState("");
+  const [demoLines, setDemoLines] = useState<string[]>();
+  useEffect(() => {
+    api
+      .health()
+      .then((h) => setDemoLines(h.demo_lines))
+      .catch(() => {});
+  }, []);
   const [plan, setPlan] = useState(initial.plan_draft?.plan ?? "");
   const [busy, setBusy] = useState<Busy>("");
   const [error, setError] = useState("");
@@ -376,7 +383,15 @@ function IssuePage({
     // 日本語の変換を確定する Enter では送らない
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      if (!busy) send();
+      if (busy) return;
+      // 発表用デモ: 空のまま Enter で、台本の次のセリフを入れるだけ (送るのは次の Enter)
+      if (!text.trim() && demoLines) {
+        const next =
+          demoLines[issue.chat.filter((m) => m.role === "user").length];
+        if (next) setText(next);
+        return;
+      }
+      send();
     }
   };
 

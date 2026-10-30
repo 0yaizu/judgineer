@@ -1,4 +1,5 @@
 import type { AppType } from "@tka/backend/app";
+import type { Health } from "@tka/shared";
 import { hc } from "hono/client";
 import type {
   AIConfig,
@@ -92,6 +93,7 @@ const issueApi = projectApi.issues[":iid"];
 const ip = (pid: string, iid: string) => ({ param: { pid, iid } });
 
 export const api = {
+  health: () => read<Health>(client.health.$get()),
   config: () => read<AIConfig>(client.config.$get()),
   targets: () => read<Target[]>(client.targets.$get()),
   removeTarget: (id: string) =>
